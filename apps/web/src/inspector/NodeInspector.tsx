@@ -21,6 +21,9 @@ export default function NodeInspector(): JSX.Element {
   const result = (selected?.data as any)?.lastResult as any
 
   const kind = (selected?.data as any)?.kind as string | undefined
+  const subflowRef = (selected?.data as any)?.subflowRef as string | undefined
+  const subflowIO = (selected?.data as any)?.io as any
+  const bindings = (selected?.data as any)?.ioBindings as { inputs?: Record<string,string>; outputs?: Record<string,string> } || { inputs: {}, outputs: {} }
 
   const form = useForm<any>({
     resolver: zodResolver(
@@ -61,6 +64,44 @@ export default function NodeInspector(): JSX.Element {
         <button onClick={() => cancelNode(selected.id)}>停止</button>
         <button onClick={() => useRFStore.getState().updateNodeData(selected.id, { logs: [] })}>清空日志</button>
       </div>
+
+      {kind === 'subflow' && (
+        <div style={{ padding: '10px 10px', border: '1px dashed rgba(127,127,127,.35)', borderRadius: 8, marginBottom: 10 }}>
+          <div style={{ fontSize: 12, opacity: .8, marginBottom: 6 }}>子工作流模式：{subflowRef ? `引用 (${subflowRef})` : '嵌入'}</div>
+          {!subflowRef && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={() => useUIStore.getState().openSubflow(selected.id)}>打开子工作流</button>
+              <button onClick={() => {
+                const flows = require('../flows/registry') as any
+                const list = flows.listFlows?.() || []
+                if (!list.length) { alert('库中暂无工作流'); return }
+                const pick = prompt('输入要引用的 Flow 名称：\n' + list.map((f:any)=>`- ${f.name} (${f.id})`).join('\n'))
+                const match = list.find((f:any)=> f.name === pick || f.id === pick)
+                if (match) {
+                  const rec = flows.getFlow?.(match.id)
+                  useRFStore.getState().updateNodeData(selected.id, { subflowRef: match.id, label: match.name, subflow: undefined, io: rec?.io })
+                }
+              }}>转换为引用</button>
+            </div>
+          )}
+          {subflowRef && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={() => {
+                const flows = require('../flows/registry') as any
+                const rec = flows.getFlow?.(subflowRef)
+                if (!rec) { alert('引用的 Flow 不存在'); return }
+                useRFStore.getState().updateNodeData(selected.id, { subflow: { nodes: rec.nodes, edges: rec.edges }, subflowRef: undefined })
+              }}>解除引用并嵌入副本</button>
+              <button onClick={() => {
+                const flows = require('../flows/registry') as any
+                const rec = flows.getFlow?.(subflowRef)
+                if (!rec) { alert('Flow 不存在'); return }
+                useRFStore.getState().updateNodeData(selected.id, { io: rec.io })
+              }}>同步 IO</button>
+            </div>
+          )}
+        </div>
+      )}
       <label style={{ display: 'block', fontSize: 12, opacity: .8, marginBottom: 4 }}>标题</label>
       <input
         value={(selected.data as any)?.label ?? ''}
@@ -144,6 +185,39 @@ export default function NodeInspector(): JSX.Element {
           <div style={{ color: 'tomato', fontSize: 12 }}>{form.formState.errors.transcript?.message as any}</div>
           <button type="submit" style={{ marginTop: 10 }}>应用</button>
         </form>
+      )}
+
+      {kind === 'subflow' && subflowIO && (
+        <div style={{ marginTop: 14 }}>
+          <h3 style={{ margin: '8px 0 8px', fontSize: 14 }}>IO 映射</h3>
+          <div style={{ fontSize: 12, opacity: .7, marginBottom: 6 }}>配置父级变量名/键，与子工作流 IO 对应（占位实现）。</div>
+          <div style={{ fontWeight: 600, margin: '6px 0' }}>Inputs</div>
+          {(subflowIO.inputs || []).length === 0 && <div style={{ fontSize: 12, opacity: .6 }}>无</div>}
+          {(subflowIO.inputs || []).map((p: any) => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <span style={{ width: 120, fontSize: 12 }}>{p.label} <span style={{ opacity: .6 }}>({p.type})</span></span>
+              <input
+                placeholder="父级变量名"
+                value={bindings.inputs?.[p.id] || ''}
+                onChange={(e) => useRFStore.getState().updateNodeData(selected.id, { ioBindings: { inputs: { ...bindings.inputs, [p.id]: e.target.value }, outputs: bindings.outputs } })}
+                style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid rgba(127,127,127,.35)' }}
+              />
+            </div>
+          ))}
+          <div style={{ fontWeight: 600, margin: '6px 0' }}>Outputs</div>
+          {(subflowIO.outputs || []).length === 0 && <div style={{ fontSize: 12, opacity: .6 }}>无</div>}
+          {(subflowIO.outputs || []).map((p: any) => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <span style={{ width: 120, fontSize: 12 }}>{p.label} <span style={{ opacity: .6 }}>({p.type})</span></span>
+              <input
+                placeholder="父级输出键"
+                value={bindings.outputs?.[p.id] || ''}
+                onChange={(e) => useRFStore.getState().updateNodeData(selected.id, { ioBindings: { inputs: bindings.inputs, outputs: { ...bindings.outputs, [p.id]: e.target.value } } })}
+                style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid rgba(127,127,127,.35)' }}
+              />
+            </div>
+          ))}
+        </div>
       )}
 
       <div style={{ marginTop: 16 }}>

@@ -2,6 +2,7 @@ import React from 'react'
 import type { NodeProps } from 'reactflow'
 import { Handle, Position } from 'reactflow'
 import { useRFStore } from '../store'
+import { useUIStore } from '../../ui/uiStore'
 
 type Data = {
   label: string
@@ -28,6 +29,10 @@ export default function TaskNode({ id, data }: NodeProps<Data>): JSX.Element {
     targets.push({ id: 'in-audio', type: 'audio', pos: Position.Left })
     targets.push({ id: 'in-subtitle', type: 'subtitle', pos: Position.Left })
     sources.push({ id: 'out-video', type: 'video', pos: Position.Right })
+  } else if (kind === 'subflow') {
+    const io = (data as any)?.io as { inputs?: { id: string; type: string; label?: string }[]; outputs?: { id: string; type: string; label?: string }[] } | undefined
+    if (io?.inputs?.length) io.inputs.forEach((p, idx) => targets.push({ id: `in-${p.type}`, type: p.type, pos: Position.Left }))
+    if (io?.outputs?.length) io.outputs.forEach((p, idx) => sources.push({ id: `out-${p.type}`, type: p.type, pos: Position.Right }))
   } else if (kind === 'textToImage') {
     sources.push({ id: 'out-image', type: 'image', pos: Position.Right })
   } else if (kind === 'tts') {
@@ -42,6 +47,7 @@ export default function TaskNode({ id, data }: NodeProps<Data>): JSX.Element {
 
   const [editing, setEditing] = React.useState(false)
   const updateNodeLabel = useRFStore(s => s.updateNodeLabel)
+  const openSubflow = useUIStore(s => s.openSubflow)
 
   return (
     <div style={{
@@ -64,7 +70,10 @@ export default function TaskNode({ id, data }: NodeProps<Data>): JSX.Element {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         {!editing ? (
           <strong
-            onDoubleClick={() => setEditing(true)}
+            onDoubleClick={() => {
+              if (kind === 'subflow') openSubflow(id)
+              else setEditing(true)
+            }}
             title="双击重命名"
             style={{ cursor: 'text' }}
           >{data?.label ?? 'Task'}</strong>

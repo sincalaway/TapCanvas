@@ -16,6 +16,27 @@ export async function runNodeMock(id: string, get: Getter, set: Setter) {
   const isCanceled = get().isCanceled as (id: string) => boolean
   const endRunToken = get().endRunToken as (id: string) => void
 
+  if (kind === 'subflow') {
+    setNodeStatus(id, 'queued', { progress: 0 })
+    appendLog(id, `[${new Date().toLocaleTimeString()}] queued (subflow)`) 
+    await sleep(200)
+    if (isCanceled?.(id)) { setNodeStatus(id, 'canceled', { progress: 0 }); endRunToken?.(id); return }
+    beginToken?.(id)
+    setNodeStatus(id, 'running', { progress: 5 })
+    appendLog(id, `[${new Date().toLocaleTimeString()}] entering subflow...`)
+    // simulate deeper work by a few steps
+    for (let i = 1; i <= 6; i++) {
+      await sleep(200 + Math.random() * 300)
+      if (isCanceled?.(id)) { setNodeStatus(id, 'canceled', { progress: 0 }); appendLog(id, `[${new Date().toLocaleTimeString()}] canceled in subflow`); endRunToken?.(id); return }
+      setNodeStatus(id, 'running', { progress: 5 + Math.round((i / 6) * 90) })
+      appendLog(id, `[${new Date().toLocaleTimeString()}] sub-step ${i}/6`)
+    }
+    setNodeStatus(id, 'success', { progress: 100, lastResult: { id, at: Date.now(), kind, preview: { type: 'text', value: 'subflow OK' } } })
+    appendLog(id, `[${new Date().toLocaleTimeString()}] subflow success`)
+    endRunToken?.(id)
+    return
+  }
+
   setNodeStatus(id, 'queued', { progress: 0 })
   appendLog(id, `[${new Date().toLocaleTimeString()}] queued`)
   await sleep(200 + Math.random() * 300)

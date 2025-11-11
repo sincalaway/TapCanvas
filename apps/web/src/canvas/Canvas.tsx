@@ -62,9 +62,21 @@ function CanvasInner(): JSX.Element {
     evt.preventDefault()
     const tplName = evt.dataTransfer.getData('application/tap-template')
     const rfdata = evt.dataTransfer.getData('application/reactflow')
+    const flowRef = evt.dataTransfer.getData('application/tapflow')
     const pos = rf.screenToFlowPosition({ x: evt.clientX, y: evt.clientY })
     if (tplName) {
       applyTemplateAt(tplName, pos)
+      return
+    }
+    if (flowRef) {
+      try {
+        const ref = JSON.parse(flowRef) as { id: string; name: string }
+        useRFStore.setState((s) => {
+          const id = `n${s.nextId}`
+          const node = { id, type: 'taskNode' as const, position: pos, data: { label: ref.name, kind: 'subflow', subflowRef: ref.id } }
+          return { nodes: [...s.nodes, node], nextId: s.nextId + 1 }
+        })
+      } catch {}
       return
     }
     if (rfdata) {
@@ -254,8 +266,8 @@ function CanvasInner(): JSX.Element {
           const sHandle = c.sourceHandle || ''
           const tHandle = c.targetHandle || ''
           if (sHandle && tHandle) {
-            const sType = sHandle.toString().startsWith('out-') ? sHandle.toString().slice(4) : undefined
-            const tType = tHandle.toString().startsWith('in-') ? tHandle.toString().slice(3) : undefined
+            const sType = sHandle.toString().startsWith('out-') ? sHandle.toString().slice(4).split('-')[0] : undefined
+            const tType = tHandle.toString().startsWith('in-') ? tHandle.toString().slice(3).split('-')[0] : undefined
             if (sType && tType && sType !== 'any' && tType !== 'any' && sType !== tType) { lastReason.current = `类型不兼容：${sType} → ${tType}`; return false }
           }
           const ok = isValidEdgeByType(sKind, tKind)
