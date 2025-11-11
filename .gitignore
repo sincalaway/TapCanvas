@@ -1,0 +1,16 @@
+# Node / PNPM
+node_modules/
+.pnpm-store/
+dist/
+.turbo/
+
+# Env / local
+.env*
+apps/**/.env*
+packages/**/.env*
+
+# OS / misc
+.DS_Store
+*.log
+artifacts/
+
