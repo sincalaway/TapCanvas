@@ -56,6 +56,7 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
   const [prompt, setPrompt] = React.useState<string>((data as any)?.prompt || '')
   const [aspect, setAspect] = React.useState<string>((data as any)?.aspect || '16:9')
   const [scale, setScale] = React.useState<number>((data as any)?.scale || 1)
+  const selectedCount = useRFStore(s => s.nodes.reduce((acc, n) => acc + (n.selected ? 1 : 0), 0))
 
   return (
     <div style={{
@@ -65,7 +66,7 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
       background: 'rgba(127,127,127,.08)'
     }}>
       {/* Top floating toolbar anchored to node */}
-      <NodeToolbar isVisible={!!selected} position={Position.Top} align="center">
+      <NodeToolbar isVisible={!!selected && selectedCount === 1} position={Position.Top} align="center">
         <Paper withBorder shadow="sm" radius="xl" className="glass" p={4}>
           <Group gap={6}>
             <ActionIcon variant="subtle" title="放大预览"><IconMaximize size={16} /></ActionIcon>
@@ -146,7 +147,7 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
       ))}
 
       {/* Bottom detail panel near node */}
-      <NodeToolbar isVisible={!!selected} position={Position.Bottom} align="center">
+      <NodeToolbar isVisible={!!selected && selectedCount === 1} position={Position.Bottom} align="center">
         <Paper withBorder shadow="md" radius="md" className="glass" p="sm" style={{ width: 420, transformOrigin: 'top center' }}>
           <Text size="xs" c="dimmed" mb={6}>详情</Text>
           <Textarea autosize minRows={2} placeholder="在这里输入提示词..." value={prompt} onChange={(e)=>setPrompt(e.currentTarget.value)} />

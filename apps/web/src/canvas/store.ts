@@ -4,10 +4,14 @@ import { addEdge, applyEdgeChanges, applyNodeChanges } from 'reactflow'
 import { runNodeMock } from '../runner/mockRunner'
 import { runFlowDag } from '../runner/dag'
 
+type GroupRec = { id: string; name: string; nodeIds: string[] }
+
 type RFState = {
   nodes: Node[]
   edges: Edge[]
   nextId: number
+  groups: GroupRec[]
+  nextGroupId: number
   onNodesChange: OnNodesChange
   onEdgesChange: OnEdgesChange
   onConnect: OnConnect
@@ -44,6 +48,10 @@ type RFState = {
   selectAll: () => void
   clearSelection: () => void
   invertSelection: () => void
+  // groups
+  addGroupForSelection: (name?: string) => void
+  removeGroupById: (id: string) => void
+  findGroupMatchingSelection: () => GroupRec | null
 }
 
 function genId(prefix: string, n: number) {
@@ -58,6 +66,8 @@ export const useRFStore = create<RFState>((set, get) => ({
   nodes: [],
   edges: [],
   nextId: 1,
+  groups: [],
+  nextGroupId: 1,
   historyPast: [],
   historyFuture: [],
   clipboard: null,
@@ -96,10 +106,14 @@ export const useRFStore = create<RFState>((set, get) => ({
   reset: () => set({ nodes: [], edges: [], nextId: 1 }),
   load: (data) => {
     if (!data) return
+    // support optional groups in payload
+    const anyData = data as any
     set((s) => ({
       nodes: data.nodes,
       edges: data.edges,
       nextId: data.nodes.length + 1,
+      groups: Array.isArray(anyData.groups) ? anyData.groups : [],
+      nextGroupId: Array.isArray(anyData.groups) ? anyData.groups.length + 1 : 1,
       historyPast: [...s.historyPast, cloneGraph(s.nodes, s.edges)].slice(-50),
       historyFuture: [],
     }))
@@ -284,11 +298,27 @@ export const useRFStore = create<RFState>((set, get) => ({
     nodes: s.nodes.map(n => ({ ...n, selected: !n.selected })),
     edges: s.edges.map(e => ({ ...e, selected: !e.selected })),
   })),
+  addGroupForSelection: (name) => set((s) => {
+    const selected = s.nodes.filter(n => n.selected).map(n => n.id)
+    if (selected.length < 2) return {}
+    const exists = s.groups.find(g => g.nodeIds.length === selected.length && g.nodeIds.every(id => selected.includes(id)))
+    if (exists) return {}
+    const id = `g${s.nextGroupId}`
+    const rec: GroupRec = { id, name: name || '新建组', nodeIds: selected }
+    return { groups: [...s.groups, rec], nextGroupId: s.nextGroupId + 1 }
+  }),
+  removeGroupById: (id) => set((s) => ({ groups: s.groups.filter(g => g.id !== id) })),
+  findGroupMatchingSelection: () => {
+    const s = get()
+    const selected = s.nodes.filter(n => n.selected).map(n => n.id)
+    if (selected.length < 2) return null
+    return s.groups.find(g => g.nodeIds.length === selected.length && g.nodeIds.every(id => selected.includes(id))) || null
+  },
 }))
 
 export function persistToLocalStorage(key = 'tapcanvas-flow') {
   const state = useRFStore.getState()
-  const payload = JSON.stringify({ nodes: state.nodes, edges: state.edges })
+  const payload = JSON.stringify({ nodes: state.nodes, edges: state.edges, groups: state.groups })
   localStorage.setItem(key, payload)
 }
 
@@ -296,7 +326,7 @@ export function restoreFromLocalStorage(key = 'tapcanvas-flow') {
   try {
     const raw = localStorage.getItem(key)
     if (!raw) return null
-    return JSON.parse(raw) as { nodes: Node[]; edges: Edge[] }
+    return JSON.parse(raw) as { nodes: Node[]; edges: Edge[]; groups?: GroupRec[] }
   } catch {
     return null
   }

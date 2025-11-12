@@ -206,6 +206,7 @@ function CanvasInner(): JSX.Element {
 
   const viewport = rf.getViewport?.() || { x: 0, y: 0, zoom: 1 }
   const flowToScreen = useCallback((p: { x: number; y: number }) => ({ x: p.x * viewport.zoom + viewport.x, y: p.y * viewport.zoom + viewport.y }), [viewport.x, viewport.y, viewport.zoom])
+  const screenToFlow = useCallback((p: { x: number; y: number }) => rf.screenToFlowPosition ? rf.screenToFlowPosition(p) : p, [rf])
 
   const onNodeDragStart = useCallback(() => setDragging(true), [])
   const onNodeDrag = useCallback((_evt: any, node: any) => {
@@ -257,6 +258,7 @@ function CanvasInner(): JSX.Element {
 
   // Group overlay computation
   const selectedNodes = nodes.filter(n=>n.selected)
+  const groupMatch = useRFStore(s => s.findGroupMatchingSelection())
   const defaultW = 180, defaultH = 96
   let groupRect: { sx: number; sy: number; w: number; h: number } | null = null
   if (selectedNodes.length > 1) {
@@ -269,6 +271,54 @@ function CanvasInner(): JSX.Element {
     const padding = 8
     groupRect = { sx: tl.x - padding, sy: tl.y - padding, w: (br.x - tl.x) + padding*2, h: (br.y - tl.y) + padding*2 }
   }
+
+  // Edge highlight when connected to a selected node
+  const selectedIds = new Set(selectedNodes.map(n=>n.id))
+  const viewEdges = useMemo(() => {
+    if (selectedIds.size === 0) return edges
+    return edges.map(e => {
+      const active = selectedIds.has(e.source) || selectedIds.has(e.target)
+      return active ? { ...e, style: { ...(e.style||{}), stroke: '#e5e7eb', opacity: 1 } } : { ...e, style: { ...(e.style||{}), opacity: 0.5 } }
+    })
+  }, [edges, selectedIds])
+
+  // Drag group overlay to move all selected nodes together
+  const groupDragRef = useRef<{ start: { x:number;y:number }; startPositions: Record<string,{x:number;y:number}> }|null>(null)
+  const startGroupDrag = useCallback((evt: React.MouseEvent) => {
+    if (!groupRect || selectedNodes.length < 2) return
+    const start = { x: evt.clientX, y: evt.clientY }
+    const startPositions: Record<string,{x:number;y:number}> = {}
+    selectedNodes.forEach(n => { startPositions[n.id] = { x: n.position.x, y: n.position.y } })
+    groupDragRef.current = { start, startPositions }
+    evt.preventDefault()
+    evt.stopPropagation()
+  }, [groupRect, selectedNodes])
+  const onWindowMouseMove = useCallback((evt: MouseEvent) => {
+    if (!groupDragRef.current) return
+    const dx = evt.clientX - groupDragRef.current.start.x
+    const dy = evt.clientY - groupDragRef.current.start.y
+    // convert screen delta to flow delta via zoom scale
+    const dz = viewport.zoom || 1
+    const fx = dx / dz
+    const fy = dy / dz
+    useRFStore.setState(s => ({
+      nodes: s.nodes.map(n => {
+        if (!groupDragRef.current) return n
+        if (!selectedIds.has(n.id)) return n
+        const sp = groupDragRef.current.startPositions[n.id]
+        return { ...n, position: { x: sp.x + fx, y: sp.y + fy } }
+      })
+    }))
+  }, [viewport.zoom, selectedIds])
+  const onWindowMouseUp = useCallback(() => { groupDragRef.current = null }, [])
+  useEffect(() => {
+    window.addEventListener('mousemove', onWindowMouseMove)
+    window.addEventListener('mouseup', onWindowMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onWindowMouseMove)
+      window.removeEventListener('mouseup', onWindowMouseUp)
+    }
+  }, [onWindowMouseMove, onWindowMouseUp])
 
   const layoutGrid = () => {
     if (selectedNodes.length < 2) return
@@ -315,7 +365,7 @@ function CanvasInner(): JSX.Element {
     >
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={viewEdges}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}
@@ -375,10 +425,10 @@ function CanvasInner(): JSX.Element {
       </ReactFlow>
       {groupRect && (
         <>
-          <div style={{ position: 'absolute', left: groupRect.sx, top: groupRect.sy, width: groupRect.w, height: groupRect.h, borderRadius: 12, background: 'rgba(148,163,184,0.12)', border: '1px solid rgba(148,163,184,0.35)', pointerEvents: 'none' }} />
+          <div onMouseDown={startGroupDrag} style={{ position: 'absolute', left: groupRect.sx, top: groupRect.sy, width: groupRect.w, height: groupRect.h, borderRadius: 12, background: 'rgba(148,163,184,0.12)', border: '1px solid rgba(148,163,184,0.35)', cursor: 'move' }} />
           <Paper withBorder shadow="sm" radius="xl" className="glass" p={4} style={{ position: 'absolute', left: groupRect.sx, top: groupRect.sy - 36 }}>
             <Group gap={6}>
-              <Text size="xs" c="dimmed">Group</Text>
+              <Text size="xs" c="dimmed">{groupMatch?.name || 'Group'}</Text>
               <Divider orientation="vertical" style={{ height: 16 }} />
               <Button size="xs" variant="subtle" onClick={layoutGrid}>宫格布局</Button>
               <Button size="xs" variant="subtle" onClick={layoutHorizontal}>水平布局</Button>
@@ -392,24 +442,10 @@ function CanvasInner(): JSX.Element {
                 saveAsset({ name, nodes: sel, edges: es })
               }}>创建资产</Button>
               <Button size="xs" variant="subtle" onClick={()=>{
-                // 打组：封装为一个 subflow 节点
-                if (nodes.filter(n=>n.selected).length < 2) return
-                const sel = nodes.filter(n=>n.selected)
-                const setIds = new Set(sel.map(n=>n.id))
-                const es = edges.filter(e=> setIds.has(e.source) && setIds.has(e.target))
-                const cx = (groupRect!.sx + groupRect!.w/2)
-                const cy = (groupRect!.sy + groupRect!.h/2)
-                const flowPos = rf.project({ x: cx, y: cy })
-                useRFStore.setState(s => ({
-                  nodes: [
-                    ...s.nodes.filter(n=>!setIds.has(n.id)),
-                    { id: `n${s.nextId}`, type: 'taskNode', position: { x: flowPos.x - 90, y: flowPos.y - 60 }, data: { label: '新建组', kind: 'subflow', subflow: { nodes: sel, edges: es } } }
-                  ],
-                  edges: s.edges.filter(e=> !(setIds.has(e.source) && setIds.has(e.target))),
-                  nextId: s.nextId + 1
-                }))
+                const name = prompt('组名称：', groupMatch?.name || '新建组')?.trim() || undefined
+                useRFStore.getState().addGroupForSelection(name)
               }}>打组</Button>
-              <Button size="xs" variant="subtle" color="red" onClick={()=>useRFStore.getState().clearSelection()}>解组</Button>
+              <Button size="xs" variant="subtle" color="red" onClick={()=>{ if (groupMatch) useRFStore.getState().removeGroupById(groupMatch.id) }}>解组</Button>
             </Group>
           </Paper>
         </>

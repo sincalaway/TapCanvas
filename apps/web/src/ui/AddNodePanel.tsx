@@ -14,7 +14,7 @@ export default function AddNodePanel(): JSX.Element | null {
   const mounted = active === 'add'
   if (!mounted) return null
   return (
-    <div style={{ position: 'fixed', left: 76, top: (anchorY ? anchorY - 120 : 64), zIndex: 75 }} data-ux-panel>
+    <div style={{ position: 'fixed', left: 82, top: (anchorY ? anchorY - 120 : 64), zIndex: 75 }} data-ux-panel>
       <Transition mounted={mounted} transition="pop" duration={140} timingFunction="ease">
         {(styles) => (
           <div style={styles}>

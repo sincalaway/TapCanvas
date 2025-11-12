@@ -32,7 +32,7 @@ export default function AssetPanel(): JSX.Element | null {
   }
 
   return (
-    <div style={{ position: 'fixed', left: 76, top: (anchorY ? anchorY - 150 : 140), zIndex: 74 }} data-ux-panel>
+    <div style={{ position: 'fixed', left: 82, top: (anchorY ? anchorY - 150 : 140), zIndex: 74 }} data-ux-panel>
       <Transition mounted={mounted} transition="pop" duration={140} timingFunction="ease">
         {(styles) => (
           <div style={styles}>
@@ -64,4 +64,3 @@ export default function AssetPanel(): JSX.Element | null {
     </div>
   )
 }
-
