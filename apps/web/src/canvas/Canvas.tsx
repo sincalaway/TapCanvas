@@ -283,7 +283,7 @@ function CanvasInner(): JSX.Element {
         connectionLineStyle={{ stroke: '#8b5cf6', strokeWidth: 2 }}
       >
         <MiniMap />
-        <Controls position="bottom-right" />
+        <Controls position="bottom-left" />
         <Background gap={16} size={1} color="#2a2f3a" variant="dots" />
       </ReactFlow>
       {guides?.vx !== undefined && (

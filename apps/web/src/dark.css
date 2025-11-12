@@ -9,7 +9,7 @@
 }
 
 /* AppShell 区块边框更克制 */
-.mantine-AppShell-header { border-bottom: 1px solid var(--mantine-color-gray-6) !important; background: #0f1014 !important; }
+.mantine-AppShell-header { border-bottom: none !important; background: transparent !important; }
 .mantine-AppShell-navbar { border-right: 1px solid var(--mantine-color-gray-6) !important; background: #0f1014 !important; }
 .mantine-AppShell-aside { border-left: 1px solid var(--mantine-color-gray-6) !important; background: #0f1014 !important; }
 .mantine-AppShell-main { background: var(--mantine-color-body) !important; }
@@ -64,15 +64,18 @@ button { color: var(--mantine-color-text); }
 
 /* React Flow 细节暗色化与弱化 */
 .react-flow__controls {
-  background: rgba(255,255,255,0.02) !important;
-  border: 1px solid rgba(255,255,255,0.12) !important;
+  background: rgba(15,16,20,0.6) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
 }
 .react-flow__controls-button {
   background: transparent !important;
   border-top: 1px solid rgba(255,255,255,0.08) !important;
-  color: var(--mantine-color-text) !important;
+  color: #ffffff !important;
 }
 .react-flow__controls-button:hover { background: rgba(255,255,255,0.06) !important; }
+.react-flow__controls-button svg { stroke: #ffffff !important; }
 
 .react-flow__minimap { background: #0f1014 !important; border: 1px solid rgba(255,255,255,0.08) !important; }
 .react-flow__minimap-mask { fill: rgba(255,255,255,0.03) !important; }

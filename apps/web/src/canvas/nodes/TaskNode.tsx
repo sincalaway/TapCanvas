@@ -1,8 +1,10 @@
 import React from 'react'
 import type { NodeProps } from 'reactflow'
-import { Handle, Position } from 'reactflow'
+import { Handle, Position, NodeToolbar } from 'reactflow'
 import { useRFStore } from '../store'
 import { useUIStore } from '../../ui/uiStore'
+import { ActionIcon, Group, Paper, Textarea, Select, NumberInput, Button, Text } from '@mantine/core'
+import { IconMaximize, IconDownload, IconArrowsDiagonal2, IconBrush, IconPhotoUp, IconDots, IconAdjustments } from '@tabler/icons-react'
 
 type Data = {
   label: string
@@ -11,7 +13,7 @@ type Data = {
   progress?: number
 }
 
-export default function TaskNode({ id, data }: NodeProps<Data>): JSX.Element {
+export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.Element {
   const status = data?.status ?? 'idle'
   const color =
     status === 'success' ? '#16a34a' :
@@ -48,6 +50,12 @@ export default function TaskNode({ id, data }: NodeProps<Data>): JSX.Element {
   const [editing, setEditing] = React.useState(false)
   const updateNodeLabel = useRFStore(s => s.updateNodeLabel)
   const openSubflow = useUIStore(s => s.openSubflow)
+  const openParamFor = useUIStore(s => s.openParamFor)
+  const runSelected = useRFStore(s => s.runSelected)
+  const updateNodeData = useRFStore(s => s.updateNodeData)
+  const [prompt, setPrompt] = React.useState<string>((data as any)?.prompt || '')
+  const [aspect, setAspect] = React.useState<string>((data as any)?.aspect || '16:9')
+  const [scale, setScale] = React.useState<number>((data as any)?.scale || 1)
 
   return (
     <div style={{
@@ -56,6 +64,20 @@ export default function TaskNode({ id, data }: NodeProps<Data>): JSX.Element {
       padding: '10px 12px',
       background: 'rgba(127,127,127,.08)'
     }}>
+      {/* Top floating toolbar anchored to node */}
+      <NodeToolbar isVisible={!!selected} position={Position.Top} align="center">
+        <Paper withBorder shadow="sm" radius="xl" className="glass" p={4}>
+          <Group gap={6}>
+            <ActionIcon variant="subtle" title="放大预览"><IconMaximize size={16} /></ActionIcon>
+            <ActionIcon variant="subtle" title="下载"><IconDownload size={16} /></ActionIcon>
+            <ActionIcon variant="subtle" title="扩图/重绘"><IconArrowsDiagonal2 size={16} /></ActionIcon>
+            <ActionIcon variant="subtle" title="局部重绘"><IconBrush size={16} /></ActionIcon>
+            <ActionIcon variant="subtle" title="高清增强"><IconPhotoUp size={16} /></ActionIcon>
+            <ActionIcon variant="subtle" title="参数" onClick={()=>openParamFor(id)}><IconAdjustments size={16} /></ActionIcon>
+            <ActionIcon variant="subtle" title="更多"><IconDots size={16} /></ActionIcon>
+          </Group>
+        </Paper>
+      </NodeToolbar>
       {targets.map(h => (
         <Handle
           key={h.id}
@@ -122,6 +144,21 @@ export default function TaskNode({ id, data }: NodeProps<Data>): JSX.Element {
           title={`输出: ${h.type}`}
         />
       ))}
+
+      {/* Bottom detail panel near node */}
+      <NodeToolbar isVisible={!!selected} position={Position.Bottom} align="center">
+        <Paper withBorder shadow="md" radius="md" className="glass" p="sm" style={{ width: 420, transformOrigin: 'top center' }}>
+          <Text size="xs" c="dimmed" mb={6}>详情</Text>
+          <Textarea autosize minRows={2} placeholder="在这里输入提示词..." value={prompt} onChange={(e)=>setPrompt(e.currentTarget.value)} />
+          <Group grow mt={6}>
+            <Select label="比例" data={[{value:'16:9',label:'16:9'},{value:'1:1',label:'1:1'},{value:'9:16',label:'9:16'}]} value={aspect} onChange={(v)=>setAspect(v||'16:9')} />
+            <NumberInput label="倍率" min={0.5} max={4} step={0.5} value={scale} onChange={(v)=>setScale(Number(v)||1)} />
+          </Group>
+          <Group justify="flex-end" mt={8}>
+            <Button size="xs" onClick={()=>{ updateNodeData(id, { prompt, aspect, scale }); runSelected() }}>一键执行</Button>
+          </Group>
+        </Paper>
+      </NodeToolbar>
     </div>
   )
 }

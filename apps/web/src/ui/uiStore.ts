@@ -17,6 +17,9 @@ type UIState = {
   setActivePanel: (p: 'add' | 'template' | null) => void
   panelAnchorY: number | null
   setPanelAnchorY: (y: number | null) => void
+  paramNodeId: string | null
+  openParamFor: (id: string) => void
+  closeParam: () => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -36,4 +39,7 @@ export const useUIStore = create<UIState>((set) => ({
   setActivePanel: (p) => set({ activePanel: p }),
   panelAnchorY: null,
   setPanelAnchorY: (y) => set({ panelAnchorY: y }),
+  paramNodeId: null,
+  openParamFor: (id) => set({ paramNodeId: id }),
+  closeParam: () => set({ paramNodeId: null }),
 }))

@@ -47,7 +47,7 @@ export default function SubflowEditor({ nodeId, onClose }: Props) {
               connectionLineType={ConnectionLineType.SmoothStep}
             >
               <MiniMap />
-              <Controls />
+              <Controls position="bottom-left" />
               <Background gap={16} size={1} color="#2a2f3a" variant="dots" />
             </ReactFlow>
           </ReactFlowProvider>
