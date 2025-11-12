@@ -74,6 +74,21 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
     if (!selected || selectedCount !== 1) setShowMore(false)
   }, [selected, selectedCount])
 
+  // Define node-specific tools and overflow calculation
+  const uniqueDefs = React.useMemo(() => ([
+    { key: 'extend', label: '扩图/重绘', icon: <IconArrowsDiagonal2 size={16} />, onClick: () => {} },
+    { key: 'inpaint', label: '局部重绘', icon: <IconBrush size={16} />, onClick: () => {} },
+    { key: 'upscale', label: '高清增强', icon: <IconPhotoUp size={16} />, onClick: () => {} },
+    { key: 'params', label: '参数', icon: <IconAdjustments size={16} />, onClick: () => openParamFor(id) },
+  ] as { key: string; label: string; icon: JSX.Element; onClick: () => void }[]), [id, openParamFor])
+
+  const maxTools = 5
+  const commonLen = 2
+  const reserveForMore = uniqueDefs.length > (maxTools - commonLen) ? 1 : 0
+  const maxUniqueVisible = Math.max(0, maxTools - commonLen - reserveForMore)
+  const visibleDefs = uniqueDefs.slice(0, maxUniqueVisible)
+  const extraDefs = uniqueDefs.slice(maxUniqueVisible)
+
   const hasContent = React.useMemo(() => {
     if (kind === 'image') return Boolean(imageUrl)
     if (kind === 'video' || kind === 'composeVideo') return Boolean((data as any)?.videoUrl)
@@ -110,50 +125,46 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
       <div style={{ fontSize: 12, fontWeight: 600, color: '#e5e7eb', marginBottom: 6 }}>{data?.label ?? (kind==='image' ? 'Image' : 'Task')}</div>
       {/* Top floating toolbar anchored to node */}
       <NodeToolbar isVisible={!!selected && selectedCount === 1 && hasContent} position={Position.Top} align="center">
-        <Paper withBorder shadow="sm" radius="xl" className="glass" p={4}>
-          {(() => {
-            const common = [
-              <ActionIcon key="preview" variant="subtle" title="放大预览" onClick={()=>{
-                const url = (kind==='image'||kind==='textToImage') ? (imageUrl || (data as any)?.imageUrl) : (kind==='video'||kind==='composeVideo') ? (data as any)?.videoUrl : (kind==='tts' ? (data as any)?.audioUrl : undefined)
-                const k: any = (kind==='tts') ? 'audio' : (kind==='video'||kind==='composeVideo') ? 'video' : 'image'
-                if (url) useUIStore.getState().openPreview({ url, kind: k, name: data?.label })
-              }}><IconMaximize size={16} /></ActionIcon>,
-              <ActionIcon key="download" variant="subtle" title="下载" onClick={()=>{
-                const url = (kind==='image'||kind==='textToImage') ? (imageUrl || (data as any)?.imageUrl) : (kind==='video'||kind==='composeVideo') ? (data as any)?.videoUrl : (kind==='tts' ? (data as any)?.audioUrl : undefined)
-                if (!url) return
-                const a = document.createElement('a')
-                a.href = url
-                a.download = `${(data?.label || kind)}-${Date.now()}`
-                document.body.appendChild(a)
-                a.click()
-                a.remove()
-              }}><IconDownload size={16} /></ActionIcon>,
-            ]
-            const uniques = [
-              <ActionIcon key="extend" variant="subtle" title="扩图/重绘"><IconArrowsDiagonal2 size={16} /></ActionIcon>,
-              <ActionIcon key="inpaint" variant="subtle" title="局部重绘"><IconBrush size={16} /></ActionIcon>,
-              <ActionIcon key="upscale" variant="subtle" title="高清增强"><IconPhotoUp size={16} /></ActionIcon>,
-              <ActionIcon key="params" variant="subtle" title="参数" onClick={()=>openParamFor(id)}><IconAdjustments size={16} /></ActionIcon>,
-            ]
-            // compute visible count: max 5 including More when needed
-            const maxTools = 5
-            const reserveForMore = uniques.length > (maxTools - common.length) ? 1 : 0
-            const maxUniqueVisible = Math.max(0, maxTools - common.length - reserveForMore)
-            const visibleUniques = uniques.slice(0, maxUniqueVisible)
-            const extraUniques = uniques.slice(maxUniqueVisible)
-            const showSeparator = visibleUniques.length > 0
-            return (
-              <Group gap={6}>
-                {common}
-                {showSeparator && <span style={{ color: 'rgba(229,231,235,.65)', padding: '0 6px', userSelect: 'none' }}>|</span>}
-                {visibleUniques}
-                {extraUniques.length > 0 && (
-                  <ActionIcon variant="subtle" title="更多" onClick={()=>setShowMore(v=>!v)}><IconDots size={16} /></ActionIcon>
-                )}
-              </Group>
-            )
-          })()}
-        </Paper>
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          <Paper withBorder shadow="sm" radius="xl" className="glass" p={4}>
+            <Group gap={6}>
+            <ActionIcon key="preview" variant="subtle" title="放大预览" onClick={()=>{
+              const url = (kind==='image'||kind==='textToImage') ? (imageUrl || (data as any)?.imageUrl) : (kind==='video'||kind==='composeVideo') ? (data as any)?.videoUrl : (kind==='tts' ? (data as any)?.audioUrl : undefined)
+              const k: any = (kind==='tts') ? 'audio' : (kind==='video'||kind==='composeVideo') ? 'video' : 'image'
+              if (url) useUIStore.getState().openPreview({ url, kind: k, name: data?.label })
+            }}><IconMaximize size={16} /></ActionIcon>
+            <ActionIcon key="download" variant="subtle" title="下载" onClick={()=>{
+              const url = (kind==='image'||kind==='textToImage') ? (imageUrl || (data as any)?.imageUrl) : (kind==='video'||kind==='composeVideo') ? (data as any)?.videoUrl : (kind==='tts' ? (data as any)?.audioUrl : undefined)
+              if (!url) return
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `${(data?.label || kind)}-${Date.now()}`
+              document.body.appendChild(a)
+              a.click()
+              a.remove()
+            }}><IconDownload size={16} /></ActionIcon>
+            {visibleDefs.length > 0 && <span style={{ color: 'rgba(229,231,235,.65)', padding: '0 6px', userSelect: 'none' }}>|</span>}
+            {visibleDefs.map(d => (
+              <Button key={d.key} size="xs" variant="subtle" leftSection={d.icon} onClick={d.onClick}>{d.label}</Button>
+            ))}
+            {extraDefs.length > 0 && (
+              <ActionIcon variant="subtle" title="更多" onClick={()=>setShowMore(v=>!v)}><IconDots size={16} /></ActionIcon>
+            )}
+            </Group>
+          </Paper>
+          {showMore && (
+            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 2 }}>
+              <Paper withBorder shadow="md" radius="md" className="glass" p="xs" style={{ width: 260 }}>
+                <Text size="xs" c="dimmed" mb={6}>更多</Text>
+                <Group wrap="wrap" gap={6}>
+                  {extraDefs.map(d => (
+                    <Button key={d.key} size="xs" variant="subtle" leftSection={<>{d.icon}</>} onClick={()=>{ setShowMore(false); d.onClick() }}>{d.label}</Button>
+                  ))}
+                </Group>
+              </Paper>
+            </div>
+          )}
+        </div>
       </NodeToolbar>
       {targets.map(h => (
         <Handle
@@ -261,18 +272,7 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
         </Paper>
       </NodeToolbar>
 
-      {/* More actions popover below the node */}
-      <NodeToolbar isVisible={!!selected && selectedCount === 1 && showMore} position={Position.Bottom} align="center">
-        <Paper withBorder shadow="md" radius="md" className="glass" p="xs" style={{ width: 260, transformOrigin: 'top center' }}>
-          <Text size="xs" c="dimmed" mb={6}>更多</Text>
-          <Group wrap="wrap" gap={6}>
-            <Button size="xs" variant="subtle" leftSection={<IconArrowsDiagonal2 size={14} />} onClick={()=>setShowMore(false)}>扩图/重绘</Button>
-            <Button size="xs" variant="subtle" leftSection={<IconBrush size={14} />} onClick={()=>setShowMore(false)}>局部重绘</Button>
-            <Button size="xs" variant="subtle" leftSection={<IconPhotoUp size={14} />} onClick={()=>setShowMore(false)}>高清增强</Button>
-            <Button size="xs" variant="subtle" leftSection={<IconAdjustments size={14} />} onClick={()=>{ setShowMore(false); openParamFor(id) }}>参数</Button>
-          </Group>
-        </Paper>
-      </NodeToolbar>
+      {/* More panel rendered directly under the top toolbar with 4px gap */}
     </div>
   )
 }
