@@ -2,6 +2,7 @@ import React from 'react'
 import { AppShell, ActionIcon, Group, Title, Box, Button, TextInput, Select, Badge } from '@mantine/core'
 import { IconBrandGithub } from '@tabler/icons-react'
 import Canvas from './canvas/Canvas'
+import GithubGate from './auth/GithubGate'
 import { useRFStore } from './canvas/store'
 import './styles.css'
 import KeyboardShortcuts from './KeyboardShortcuts'
@@ -95,7 +96,9 @@ export default function App(): JSX.Element {
             setActivePanel(null)
           }
         }}>
-          <Canvas />
+          <GithubGate>
+            <Canvas />
+          </GithubGate>
         </Box>
       </AppShell.Main>
 

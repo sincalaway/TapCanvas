@@ -3,8 +3,8 @@ import ReactFlow, { Background, Controls, MiniMap, ReactFlowProvider, Connection
 import 'reactflow/dist/style.css'
 import TaskNode from '../canvas/nodes/TaskNode'
 import { getFlow, saveFlow, listFlows, deleteFlow as deleteLocalFlow, type FlowIO, validateNoCycle } from './registry'
-import { listServerFlows, getServerFlow, saveServerFlow, deleteServerFlow, type FlowDto } from '../api/server'
-import { Button, Group, Title, TextInput, Stack, Text, Divider, Select } from '@mantine/core'
+import { listServerFlows, getServerFlow, saveServerFlow, deleteServerFlow, listFlowVersions, rollbackFlow, type FlowDto } from '../api/server'
+import { Button, Group, Title, TextInput, Stack, Text, Divider, Select, Modal } from '@mantine/core'
 
 type Props = { flowId: string; onClose: () => void }
 
@@ -18,6 +18,8 @@ export default function LibraryEditor({ flowId, onClose }: Props) {
   const [io, setIo] = useState<FlowIO>(rec?.io || { inputs: [], outputs: [] })
   const [serverList, setServerList] = useState<FlowDto[]>([])
   const [localList, setLocalList] = useState(listFlows())
+  const [versions, setVersions] = useState<Array<{ id: string; createdAt: string; name: string }>>([])
+  const [showHistory, setShowHistory] = useState(false)
 
   // Load initial
   useEffect(() => {
@@ -94,6 +96,7 @@ export default function LibraryEditor({ flowId, onClose }: Props) {
       setEdges(Array.isArray(data.edges) ? data.edges : [])
       setName(r?.name || '')
       setIo({ inputs: [], outputs: [] })
+      try { setVersions(await listFlowVersions(id)) } catch { setVersions([]) }
     }
   }
 
@@ -119,6 +122,7 @@ export default function LibraryEditor({ flowId, onClose }: Props) {
               )}
               <Button size="xs" onClick={saveAll}>保存</Button>
               <Button size="xs" variant="light" onClick={saveAs}>另存为</Button>
+              {source === 'server' && <Button size="xs" variant="light" onClick={async ()=>{ setShowHistory(true); try { setVersions(await listFlowVersions(currentId)) } catch { setVersions([]) } }}>历史</Button>}
               <Button size="xs" variant="light" color="red" onClick={removeCurrent}>删除</Button>
               <Button size="xs" variant="light" onClick={onClose}>关闭</Button>
             </Group>
@@ -173,6 +177,26 @@ export default function LibraryEditor({ flowId, onClose }: Props) {
           <Button mt={6} variant="subtle" onClick={()=>addPort('outputs')}>+ 添加输出</Button>
         </div>
       </div>
+      <Modal opened={showHistory} onClose={()=>setShowHistory(false)} title="保存历史" size="lg" centered>
+        <Stack>
+          {versions.length === 0 && <Text size="sm" c="dimmed">暂无历史</Text>}
+          {versions.map(v => (
+            <Group key={v.id} justify="space-between">
+              <Text size="sm">{new Date(v.createdAt).toLocaleString()} - {v.name}</Text>
+              <Button size="xs" variant="light" onClick={async ()=>{
+                if (!confirm('回滚到该版本？当前更改将丢失')) return
+                await rollbackFlow(currentId, v.id)
+                const r = await getServerFlow(currentId)
+                const data = (r?.data || {}) as any
+                setNodes(Array.isArray(data.nodes) ? data.nodes : [])
+                setEdges(Array.isArray(data.edges) ? data.edges : [])
+                setName(r?.name || '')
+                setShowHistory(false)
+              }}>回滚</Button>
+            </Group>
+          ))}
+        </Stack>
+      </Modal>
     </div>
   )
 }

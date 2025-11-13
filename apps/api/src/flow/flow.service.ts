@@ -5,23 +5,38 @@ import { PrismaService } from 'nestjs-prisma'
 export class FlowService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list() {
-    return this.prisma.flow.findMany({ orderBy: { updatedAt: 'desc' } })
+  list(userId: string) {
+    return this.prisma.flow.findMany({ where: { ownerId: userId }, orderBy: { updatedAt: 'desc' } })
   }
 
-  get(id: string) {
-    return this.prisma.flow.findUnique({ where: { id } })
+  get(id: string, userId: string) {
+    return this.prisma.flow.findFirst({ where: { id, ownerId: userId } })
   }
 
-  async upsert(input: { id?: string; name: string; data: any }) {
+  async upsert(userId: string, input: { id?: string; name: string; data: any }) {
     if (input.id) {
-      return this.prisma.flow.update({ where: { id: input.id }, data: { name: input.name, data: input.data } })
+      const updated = await this.prisma.flow.update({ where: { id: input.id }, data: { name: input.name, data: input.data as any, ownerId: userId } })
+      await this.prisma.flowVersion.create({ data: { flowId: updated.id, name: updated.name, data: (updated as any).data as any, userId } })
+      return updated
     }
-    return this.prisma.flow.create({ data: { name: input.name, data: input.data } })
+    const created = await this.prisma.flow.create({ data: { name: input.name, data: input.data as any, ownerId: userId } })
+    await this.prisma.flowVersion.create({ data: { flowId: created.id, name: created.name, data: (created as any).data as any, userId } })
+    return created
   }
 
-  remove(id: string) {
+  remove(id: string, userId: string) {
     return this.prisma.flow.delete({ where: { id } })
   }
-}
 
+  versions(flowId: string, userId: string) {
+    return this.prisma.flowVersion.findMany({ where: { flowId }, orderBy: { createdAt: 'desc' } })
+  }
+
+  async rollback(flowId: string, versionId: string, userId: string) {
+    const v = await this.prisma.flowVersion.findFirst({ where: { id: versionId, flowId } })
+    if (!v) throw new Error('version not found')
+    const updated = await this.prisma.flow.update({ where: { id: flowId }, data: { name: v.name, data: v.data as any } })
+    await this.prisma.flowVersion.create({ data: { flowId, name: updated.name, data: (updated as any).data as any, userId } })
+    return updated
+  }
+}

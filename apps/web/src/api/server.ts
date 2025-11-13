@@ -1,33 +1,55 @@
 import type { Edge, Node } from 'reactflow'
+import { getAuthToken } from '../auth/store'
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:3000'
+function withAuth(init?: RequestInit): RequestInit {
+  const t = getAuthToken()
+  return { ...(init||{}), headers: { ...(init?.headers||{}), ...(t ? { Authorization: `Bearer ${t}` } : {}) } }
+}
 
 export type FlowDto = { id: string; name: string; data: { nodes: Node[]; edges: Edge[] }; createdAt: string; updatedAt: string }
 
 export async function listServerFlows(): Promise<FlowDto[]> {
-  const r = await fetch(`${API_BASE}/flows`)
+  const r = await fetch(`${API_BASE}/flows`, withAuth())
   if (!r.ok) throw new Error(`list flows failed: ${r.status}`)
   return r.json()
 }
 
 export async function getServerFlow(id: string): Promise<FlowDto> {
-  const r = await fetch(`${API_BASE}/flows/${id}`)
+  const r = await fetch(`${API_BASE}/flows/${id}`, withAuth())
   if (!r.ok) throw new Error(`get flow failed: ${r.status}`)
   return r.json()
 }
 
 export async function saveServerFlow(payload: { id?: string; name: string; nodes: Node[]; edges: Edge[] }): Promise<FlowDto> {
-  const r = await fetch(`${API_BASE}/flows`, {
+  const r = await fetch(`${API_BASE}/flows`, withAuth({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: payload.id, name: payload.name, data: { nodes: payload.nodes, edges: payload.edges } })
-  })
+  }))
   if (!r.ok) throw new Error(`save flow failed: ${r.status}`)
   return r.json()
 }
 
 export async function deleteServerFlow(id: string): Promise<void> {
-  const r = await fetch(`${API_BASE}/flows/${id}`, { method: 'DELETE' })
+  const r = await fetch(`${API_BASE}/flows/${id}`, withAuth({ method: 'DELETE' }))
   if (!r.ok) throw new Error(`delete flow failed: ${r.status}`)
 }
 
+export async function exchangeGithub(code: string): Promise<{ token: string; user: any }> {
+  const r = await fetch(`${API_BASE}/auth/github/exchange`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) })
+  if (!r.ok) throw new Error(`exchange failed: ${r.status}`)
+  return r.json()
+}
+
+export async function listFlowVersions(flowId: string): Promise<Array<{ id: string; createdAt: string; name: string }>> {
+  const r = await fetch(`${API_BASE}/flows/${flowId}/versions`, withAuth())
+  if (!r.ok) throw new Error(`list versions failed: ${r.status}`)
+  return r.json()
+}
+
+export async function rollbackFlow(flowId: string, versionId: string) {
+  const r = await fetch(`${API_BASE}/flows/${flowId}/rollback`, withAuth({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ versionId }) }))
+  if (!r.ok) throw new Error(`rollback failed: ${r.status}`)
+  return r.json()
+}
