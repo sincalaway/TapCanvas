@@ -6,7 +6,7 @@ import { toast } from '../../ui/toast'
 import { runFlowDag } from '../../runner/dag'
 import { NodeResizer } from 'reactflow'
 
-type Data = { label?: string }
+type Data = { label?: string; editing?: boolean }
 
 export default function GroupNode({ id, data, selected }: NodeProps<Data>): JSX.Element {
   const label = data?.label || '新建组'
@@ -16,6 +16,10 @@ export default function GroupNode({ id, data, selected }: NodeProps<Data>): JSX.
   const [editing, setEditing] = React.useState(false)
   const [name, setName] = React.useState(label)
   React.useEffect(() => { setName(label) }, [label])
+  const updateNodeData = useRFStore(s => s.updateNodeData)
+  React.useEffect(() => {
+    if (data?.editing && !editing) setEditing(true)
+  }, [data?.editing])
 
   // gather direct children by parentNode
   const childIds = React.useMemo(() => new Set(nodes.filter(n => n.parentNode === id).map(n => n.id)), [nodes, id])
@@ -27,9 +31,17 @@ export default function GroupNode({ id, data, selected }: NodeProps<Data>): JSX.
       <Paper withBorder shadow="sm" radius="xl" p={4} style={{ position: 'absolute', left: 8, top: -28, pointerEvents: 'auto', whiteSpace: 'nowrap', overflowX: 'auto' }}>
         <Group gap={6} style={{ flexWrap: 'nowrap' }}>
           {editing ? (
-            <TextInput size="xs" value={name} onChange={(e)=>setName(e.currentTarget.value)} onKeyDown={(e)=>{ if (e.key === 'Enter') { updateNodeLabel(id, name.trim() || '新建组'); setEditing(false) } }} onBlur={()=>{ updateNodeLabel(id, name.trim() || '新建组'); setEditing(false) }} styles={{ input: { height: 22, paddingTop: 0, paddingBottom: 0 } }} />
+            <TextInput
+              size="xs"
+              autoFocus
+              value={name}
+              onChange={(e)=>setName(e.currentTarget.value)}
+              onKeyDown={(e)=>{ if (e.key === 'Enter') { updateNodeLabel(id, name.trim() || '新建组'); setEditing(false); updateNodeData(id, { editing: false }) } }}
+              onBlur={()=>{ updateNodeLabel(id, name.trim() || '新建组'); setEditing(false); updateNodeData(id, { editing: false }) }}
+              styles={{ input: { height: 22, paddingTop: 0, paddingBottom: 0 } }}
+            />
           ) : (
-            <Text size="xs" c="dimmed" onDoubleClick={()=>setEditing(true)} title="双击重命名">{label}</Text>
+            <Text size="xs" c="dimmed" onDoubleClick={()=>{ setEditing(true); updateNodeData(id, { editing: true }) }} title="双击重命名">{label}</Text>
           )}
           <Divider orientation="vertical" style={{ height: 16 }} />
           <Button size="xs" color="blue" onClick={async () => {
@@ -38,8 +50,39 @@ export default function GroupNode({ id, data, selected }: NodeProps<Data>): JSX.
           <Button size="xs" variant="subtle" onClick={() => { persistToLocalStorage(); toast('已保存到本地', 'success') }}>保存</Button>
           <Button size="xs" variant="subtle" onClick={()=> setEditing(true)}>重命名</Button>
           <Button size="xs" variant="subtle" color="red" onClick={() => ungroup(id)}>解组</Button>
+          {/* Aggregated status */}
+          <Group gap={4} style={{ flexWrap: 'nowrap' }}>
+            <GroupSummary childIds={childIds} />
+          </Group>
         </Group>
       </Paper>
+    </div>
+  )
+}
+
+function GroupSummary({ childIds }: { childIds: Set<string> }) {
+  const nodes = useRFStore(s => s.nodes)
+  const kids = nodes.filter(n => childIds.has(n.id))
+  const total = kids.length || 1
+  const counts = kids.reduce((acc, n) => {
+    const st = (n.data as any)?.status || 'idle'
+    acc[st] = (acc[st] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+  const success = counts['success'] || 0
+  const running = counts['running'] || 0
+  const error = counts['error'] || 0
+  const queued = counts['queued'] || 0
+  const pct = Math.round((success / total) * 100)
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ width: 80, height: 6, background: 'rgba(148,163,184,0.25)', borderRadius: 999, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: '#16a34a' }} />
+      </div>
+      <span style={{ fontSize: 11, color: '#9ca3af' }}>{success}/{total} 成功</span>
+      {running > 0 && <span style={{ fontSize: 11, color: '#8b5cf6' }}>运行 {running}</span>}
+      {queued > 0 && <span style={{ fontSize: 11, color: '#f59e0b' }}>排队 {queued}</span>}
+      {error > 0 && <span style={{ fontSize: 11, color: '#ef4444' }}>失败 {error}</span>}
     </div>
   )
 }

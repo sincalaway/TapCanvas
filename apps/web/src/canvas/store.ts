@@ -54,6 +54,13 @@ type RFState = {
   findGroupMatchingSelection: () => GroupRec | null
   renameGroup: (id: string, name: string) => void
   ungroupGroupNode: (id: string) => void
+  layoutGridSelected: () => void
+  layoutHorizontalSelected: () => void
+  runSelectedGroup: () => Promise<void>
+  renameSelectedGroup: () => void
+  autoLayoutSelectedDag: () => void
+  autoLayoutAllDag: () => void
+  autoLayoutForParent: (parentId: string|null) => void
 }
 
 function genId(prefix: string, n: number) {
@@ -330,7 +337,8 @@ export const useRFStore = create<RFState>((set, get) => ({
       const rel = { x: n.position.x - groupNode.position.x, y: n.position.y - groupNode.position.y }
       return { ...n, parentNode: gid, position: rel, extent: 'parent' as any, selected: false }
     })
-    return { nodes: [...newNodes, groupNode].map(n => n.id === gid ? { ...n, selected: true } : n), nextGroupId: s.nextGroupId + 1 }
+    const past = [...s.historyPast, cloneGraph(s.nodes, s.edges)].slice(-50)
+    return { nodes: [...newNodes, groupNode].map(n => n.id === gid ? { ...n, selected: true } : n), nextGroupId: s.nextGroupId + 1, historyPast: past, historyFuture: [] }
   }),
   removeGroupById: (id) => set((s) => {
     // if it's a legacy record, drop it; if there's a group node, ungroup it
@@ -341,9 +349,11 @@ export const useRFStore = create<RFState>((set, get) => ({
       const restored = s.nodes
         .filter(n => n.id !== id)
         .map(n => n.parentNode === id ? { ...n, parentNode: undefined, extent: undefined, position: { x: (group.position as any).x + n.position.x, y: (group.position as any).y + n.position.y } } : n)
-      return { nodes: restored }
+      const past = [...s.historyPast, cloneGraph(s.nodes, s.edges)].slice(-50)
+      return { nodes: restored, historyPast: past, historyFuture: [] }
     }
-    return { groups: s.groups.filter(g => g.id !== id) }
+    const past = [...s.historyPast, cloneGraph(s.nodes, s.edges)].slice(-50)
+    return { groups: s.groups.filter(g => g.id !== id), historyPast: past, historyFuture: [] }
   }),
   findGroupMatchingSelection: () => {
     const s = get()
@@ -361,7 +371,185 @@ export const useRFStore = create<RFState>((set, get) => ({
       .map(n => n.parentNode === id ? { ...n, parentNode: undefined, extent: undefined, position: { x: (group.position as any).x + n.position.x, y: (group.position as any).y + n.position.y } } : n)
     // select children after ungroup
     const childIds = new Set(children.map(c => c.id))
-    return { nodes: restored.map(n => ({ ...n, selected: childIds.has(n.id) })) }
+    const past = [...s.historyPast, cloneGraph(s.nodes, s.edges)].slice(-50)
+    return { nodes: restored.map(n => ({ ...n, selected: childIds.has(n.id) })), historyPast: past, historyFuture: [] }
+  }),
+  // DAG auto layout for selected nodes (per parent container)
+  autoLayoutSelectedDag: () => set((s) => {
+    const sel = s.nodes.filter(n => n.selected)
+    if (sel.length < 2) return {}
+    const byParent = new Map<string, typeof sel>()
+    sel.forEach(n => {
+      const p = (n.parentNode as string) || ''
+      if (!byParent.has(p)) byParent.set(p, [])
+      byParent.get(p)!.push(n)
+    })
+    const edgesBySel = s.edges.filter(e => sel.some(n=>n.id===e.source) && sel.some(n=>n.id===e.target))
+    const updated = [...s.nodes]
+    const gapX = 280, gapY = 140
+    byParent.forEach(nodesInParent => {
+      const idSet = new Set(nodesInParent.map(n=>n.id))
+      const adj = new Map<string,string[]>()
+      const indeg = new Map<string,number>()
+      nodesInParent.forEach(n=>{ adj.set(n.id, []); indeg.set(n.id, 0) })
+      edgesBySel.forEach(e=>{ if(idSet.has(e.source) && idSet.has(e.target)) { adj.get(e.source)!.push(e.target); indeg.set(e.target, (indeg.get(e.target)||0)+1) } })
+      const q:string[]=[]; indeg.forEach((v,k)=>{ if(v===0) q.push(k) })
+      const layers: string[][] = []
+      const layerOf = new Map<string,number>()
+      while(q.length){
+        const levelSize = q.length
+        const layer: string[] = []
+        for(let i=0;i<levelSize;i++){
+          const u = q.shift()!
+          layer.push(u); layerOf.set(u, layers.length)
+          for(const v of adj.get(u)||[]){ const nv=(indeg.get(v)||0)-1; indeg.set(v,nv); if(nv===0) q.push(v) }
+        }
+        layers.push(layer)
+      }
+      const minX = Math.min(...nodesInParent.map(n=>n.position.x))
+      const minY = Math.min(...nodesInParent.map(n=>n.position.y))
+      layers.forEach((layer, li) => {
+        const sorted = layer.map(id => nodesInParent.find(n=>n.id===id)!).filter(Boolean).sort((a,b)=> a.position.y-b.position.y)
+        sorted.forEach((n, idx) => {
+          const i = updated.findIndex(x=>x.id===n.id)
+          if (i>=0) updated[i] = { ...updated[i], position: { x: minX + li*gapX, y: minY + idx*gapY } }
+        })
+      })
+    })
+    const past = [...s.historyPast, cloneGraph(s.nodes, s.edges)].slice(-50)
+    return { nodes: updated, historyPast: past, historyFuture: [] }
+  }),
+  // DAG auto layout for the whole graph, per parent container
+  autoLayoutAllDag: () => set((s) => {
+    const byParent = new Map<string, Node[]>()
+    s.nodes.forEach(n => { const p=(n.parentNode as string)||''; if(!byParent.has(p)) byParent.set(p, []); byParent.get(p)!.push(n) })
+    const updated = [...s.nodes]
+    const gapX = 280, gapY = 140
+    byParent.forEach(nodesInParent => {
+      const idSet = new Set(nodesInParent.map(n=>n.id))
+      const adj = new Map<string,string[]>()
+      const indeg = new Map<string,number>()
+      nodesInParent.forEach(n=>{ adj.set(n.id, []); indeg.set(n.id, 0) })
+      s.edges.forEach(e=>{ if(idSet.has(e.source) && idSet.has(e.target)) { adj.get(e.source)!.push(e.target); indeg.set(e.target, (indeg.get(e.target)||0)+1) } })
+      const q:string[]=[]; indeg.forEach((v,k)=>{ if(v===0) q.push(k) })
+      const layers: string[][] = []
+      while(q.length){
+        const levelSize = q.length
+        const layer: string[] = []
+        for(let i=0;i<levelSize;i++){
+          const u = q.shift()!
+          layer.push(u)
+          for(const v of adj.get(u)||[]){ const nv=(indeg.get(v)||0)-1; indeg.set(v,nv); if(nv===0) q.push(v) }
+        }
+        layers.push(layer)
+      }
+      const minX = Math.min(...nodesInParent.map(n=>n.position.x))
+      const minY = Math.min(...nodesInParent.map(n=>n.position.y))
+      layers.forEach((layer, li) => {
+        const sorted = layer.map(id => nodesInParent.find(n=>n.id===id)!).filter(Boolean).sort((a,b)=> a.position.y-b.position.y)
+        sorted.forEach((n, idx) => {
+          const i = updated.findIndex(x=>x.id===n.id)
+          if (i>=0) updated[i] = { ...updated[i], position: { x: minX + li*gapX, y: minY + idx*gapY } }
+        })
+      })
+    })
+    const past = [...s.historyPast, cloneGraph(s.nodes, s.edges)].slice(-50)
+    return { nodes: updated, historyPast: past, historyFuture: [] }
+  }),
+  autoLayoutForParent: (parentId) => set((s) => {
+    const nodesInParent = s.nodes.filter(n => (n.parentNode||null) === parentId)
+    if (!nodesInParent.length) return {}
+    const idSet = new Set(nodesInParent.map(n=>n.id))
+    const adj = new Map<string,string[]>()
+    const indeg = new Map<string,number>()
+    nodesInParent.forEach(n=>{ adj.set(n.id, []); indeg.set(n.id, 0) })
+    s.edges.forEach(e=>{ if(idSet.has(e.source) && idSet.has(e.target)) { adj.get(e.source)!.push(e.target); indeg.set(e.target, (indeg.get(e.target)||0)+1) } })
+    const q:string[]=[]; indeg.forEach((v,k)=>{ if(v===0) q.push(k) })
+    const layers: string[][] = []
+    while(q.length){
+      const levelSize = q.length
+      const layer: string[] = []
+      for(let i=0;i<levelSize;i++){
+        const u = q.shift()!
+        layer.push(u)
+        for(const v of adj.get(u)||[]){ const nv=(indeg.get(v)||0)-1; indeg.set(v,nv); if(nv===0) q.push(v) }
+      }
+      layers.push(layer)
+    }
+    const updated = [...s.nodes]
+    const gapX = 260, gapY = 120
+    const minX = Math.min(...nodesInParent.map(n=>n.position.x))
+    const minY = Math.min(...nodesInParent.map(n=>n.position.y))
+    layers.forEach((layer, li) => {
+      const sorted = layer.map(id => nodesInParent.find(n=>n.id===id)!).filter(Boolean).sort((a,b)=> a.position.y-b.position.y)
+      sorted.forEach((n, idx) => {
+        const i = updated.findIndex(x=>x.id===n.id)
+        if (i>=0) updated[i] = { ...updated[i], position: { x: minX + li*gapX, y: minY + idx*gapY } }
+      })
+    })
+    const past = [...s.historyPast, cloneGraph(s.nodes, s.edges)].slice(-50)
+    return { nodes: updated, historyPast: past, historyFuture: [] }
+  }),
+  layoutGridSelected: () => set((s) => {
+    const sel = s.nodes.filter(n => n.selected)
+    if (sel.length < 2) return {}
+    const byParent = new Map<string, typeof sel>()
+    sel.forEach(n => {
+      const p = (n.parentNode as string) || ''
+      if (!byParent.has(p)) byParent.set(p, [])
+      byParent.get(p)!.push(n)
+    })
+    const gapX = 220, gapY = 140
+    const updated = s.nodes.map(n => {
+      if (!n.selected) return n
+      const parent = (n.parentNode as string) || ''
+      const group = byParent.get(parent) || []
+      const nodesSorted = [...group].sort((a,b)=> (a.position.y-b.position.y) || (a.position.x-b.position.x))
+      const cols = Math.ceil(Math.sqrt(nodesSorted.length))
+      const minX = Math.min(...nodesSorted.map(x=>x.position.x))
+      const minY = Math.min(...nodesSorted.map(x=>x.position.y))
+      const idx = nodesSorted.findIndex(m => m.id === n.id)
+      const r = Math.floor(idx / cols)
+      const c = idx % cols
+      return { ...n, position: { x: minX + c*gapX, y: minY + r*gapY } }
+    })
+    const past = [...s.historyPast, cloneGraph(s.nodes, s.edges)].slice(-50)
+    return { nodes: updated, historyPast: past, historyFuture: [] }
+  }),
+  layoutHorizontalSelected: () => set((s) => {
+    const sel = s.nodes.filter(n => n.selected)
+    if (sel.length < 2) return {}
+    const byParent = new Map<string, typeof sel>()
+    sel.forEach(n => {
+      const p = (n.parentNode as string) || ''
+      if (!byParent.has(p)) byParent.set(p, [])
+      byParent.get(p)!.push(n)
+    })
+    const gapX = 220
+    const updated = s.nodes.map(n => {
+      if (!n.selected) return n
+      const parent = (n.parentNode as string) || ''
+      const group = byParent.get(parent) || []
+      const nodesSorted = [...group].sort((a,b)=> a.position.x - b.position.x)
+      const minX = Math.min(...nodesSorted.map(x=>x.position.x))
+      const minY = Math.min(...nodesSorted.map(x=>x.position.y))
+      const idx = nodesSorted.findIndex(m => m.id === n.id)
+      return { ...n, position: { x: minX + idx*gapX, y: minY } }
+    })
+    const past = [...s.historyPast, cloneGraph(s.nodes, s.edges)].slice(-50)
+    return { nodes: updated, historyPast: past, historyFuture: [] }
+  }),
+  runSelectedGroup: async () => {
+    const s = get()
+    const g = s.nodes.find((n: any) => n.type === 'groupNode' && n.selected)
+    if (!g) return
+    const only = new Set(s.nodes.filter((n: any) => n.parentNode === g.id).map((n:any)=>n.id))
+    await runFlowDag(2, get, set, { only })
+  },
+  renameSelectedGroup: () => set((s) => {
+    const g = s.nodes.find((n: any) => n.type === 'groupNode' && n.selected)
+    if (!g) return {}
+    return { nodes: s.nodes.map(n => n.id === g.id ? { ...n, data: { ...(n.data||{}), editing: true } } : n) }
   }),
 }))
 

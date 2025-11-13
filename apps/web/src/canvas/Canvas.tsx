@@ -14,28 +14,41 @@ import 'reactflow/dist/style.css'
 
 import TaskNode from './nodes/TaskNode'
 import GroupNode from './nodes/GroupNode'
+import IONode from './nodes/IONode'
 import { persistToLocalStorage, restoreFromLocalStorage, useRFStore } from './store'
 import { toast } from '../ui/toast'
 import { applyTemplateAt } from '../templates'
 import { Paper, Stack, Button, Divider, Group, Text } from '@mantine/core'
 import TypedEdge from './edges/TypedEdge'
+import OrthTypedEdge from './edges/OrthTypedEdge'
+import { useUIStore } from '../ui/uiStore'
 import { runFlowDag } from '../runner/dag'
 
 const nodeTypes: NodeTypes = {
   taskNode: TaskNode,
   groupNode: GroupNode,
+  ioNode: IONode,
 }
 
 const edgeTypes: EdgeTypes = {
   typed: TypedEdge,
+  orth: OrthTypedEdge,
 }
 
 function CanvasInner(): JSX.Element {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, load } = useRFStore()
+  const focusStack = useUIStore(s => s.focusStack)
+  const focusGroupId = focusStack.length ? focusStack[focusStack.length - 1] : null
+  const edgeRoute = useUIStore(s => s.edgeRoute)
+  const enterGroupFocus = useUIStore(s => s.enterGroupFocus)
+  const exitGroupFocus = useUIStore(s => s.exitGroupFocus)
+  const exitAllFocus = useUIStore(s => s.exitAllFocus)
   const deleteNode = useRFStore(s => s.deleteNode)
   const deleteEdge = useRFStore(s => s.deleteEdge)
   const duplicateNode = useRFStore(s => s.duplicateNode)
   const pasteFromClipboardAt = useRFStore(s => s.pasteFromClipboardAt)
+  const autoLayoutAllDag = useRFStore(s => s.autoLayoutAllDag)
+  const autoLayoutSelectedDag = useRFStore(s => s.autoLayoutSelectedDag)
   const runSelected = useRFStore(s => s.runSelected)
   const cancelNode = useRFStore(s => s.cancelNode)
   const rf = useReactFlow()
@@ -223,6 +236,23 @@ function CanvasInner(): JSX.Element {
       if (Math.abs(n.position.y - node.position.y) <= threshold) hy = n.position.y
     }
     setGuides({ vx, hy })
+
+    // If dragging IO summary nodes in focus mode, persist relative position into group node data
+    if (node?.type === 'ioNode' && (node as any)?.parentNode) {
+      const groupId = (node as any).parentNode as string
+      const isIn = (node?.data as any)?.kind === 'io-in'
+      const ioSize = { w: 96, h: 28 }
+      const grp = useRFStore.getState().nodes.find(n => n.id === groupId)
+      if (grp) {
+        const gW = (grp as any).width || (grp.style as any)?.width || 240
+        const gH = (grp as any).height || (grp.style as any)?.height || 160
+        const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v))
+        const rel = { x: clamp(node.position.x, 0, Math.max(0, gW - ioSize.w)), y: clamp(node.position.y, 0, Math.max(0, gH - ioSize.h)) }
+        useRFStore.setState(s => ({
+          nodes: s.nodes.map(n => n.id === groupId ? { ...n, data: { ...(n.data||{}), [isIn ? 'ioInPos' : 'ioOutPos']: rel } } : n)
+        }))
+      }
+    }
   }, [nodes])
 
   const onNodeDragStop = useCallback(() => {
@@ -230,40 +260,7 @@ function CanvasInner(): JSX.Element {
     setDragging(false)
   }, [])
 
-  // Auto-fit group node size to its children
-  useEffect(() => {
-    // collect group nodes
-    const groupNodes = nodes.filter((n: any) => n.type === 'groupNode')
-    if (!groupNodes.length) return
-    const padding = 8
-    const defaultW = 180, defaultH = 96
-    const updates: Record<string, { width: number; height: number }> = {}
-    for (const g of groupNodes) {
-      const kids = nodes.filter(n => n.parentNode === g.id)
-      if (!kids.length) continue
-      const minX = Math.min(...kids.map(n => n.position.x))
-      const minY = Math.min(...kids.map(n => n.position.y))
-      const maxX = Math.max(...kids.map(n => n.position.x + ((n as any).width || defaultW)))
-      const maxY = Math.max(...kids.map(n => n.position.y + ((n as any).height || defaultH)))
-      const reqW = (maxX - minX) + padding * 2
-      const reqH = (maxY - minY) + padding * 2
-      const curW = (g as any).width || (g.style as any)?.width || 0
-      const curH = (g as any).height || (g.style as any)?.height || 0
-      if (Math.abs(reqW - curW) > 1 || Math.abs(reqH - curH) > 1) {
-        updates[g.id] = { width: reqW, height: reqH }
-      }
-    }
-    const ids = Object.keys(updates)
-    if (!ids.length) return
-    useRFStore.setState(s => ({
-      nodes: s.nodes.map(n => {
-        if (!updates[n.id]) return n
-        const w = updates[n.id].width
-        const h = updates[n.id].height
-        return { ...n, style: { ...(n.style || {}), width: w, height: h } }
-      })
-    }))
-  }, [nodes])
+  // Note: auto-fit group size is disabled to avoid update loops in React Flow store; rely on NodeResizer + manual layout
 
   const handleNodesChange = useCallback((changes: any[]) => {
     const threshold = 6
@@ -323,15 +320,58 @@ function CanvasInner(): JSX.Element {
     return parents.size > 1
   }, [selectedNodes])
 
+  // Apply focus filtering (group focus mode)
+  const focusFiltered = useMemo(() => {
+    if (!focusGroupId) return { nodes, edges }
+    const group = nodes.find(n => n.id === focusGroupId)
+    if (!group) return { nodes, edges }
+    const internalIds = new Set<string>([group.id, ...nodes.filter(n => n.parentNode === group.id).map(n => n.id)])
+    const internalNodes = nodes.filter(n => internalIds.has(n.id))
+    const internalEdges = edges.filter(e => internalIds.has(e.source) && internalIds.has(e.target))
+    // Build IO summary nodes and remapped edges for cross-boundary connections
+    const inCross = edges.filter(e => !internalIds.has(e.source) && internalIds.has(e.target))
+    const outCross = edges.filter(e => internalIds.has(e.source) && !internalIds.has(e.target))
+    const inferType = (e: any) => {
+      const sh = e.sourceHandle?.toString() || ''
+      const th = e.targetHandle?.toString() || ''
+      if (sh.startsWith('out-')) return sh.slice(4)
+      if (th.startsWith('in-')) return th.slice(3)
+      return 'any'
+    }
+    const typesIn = Array.from(new Set(inCross.map(inferType)))
+    const typesOut = Array.from(new Set(outCross.map(inferType)))
+    const gWidth = (group as any).width || (group.style as any)?.width || 240
+    const gHeight = (group as any).height || (group.style as any)?.height || 160
+    const inNodeId = `io-in-${group.id}`
+    const outNodeId = `io-out-${group.id}`
+    const ioNodes = [] as any[]
+    const inPos = ((group.data as any)?.ioInPos) as { x:number;y:number } | undefined
+    const outPos = ((group.data as any)?.ioOutPos) as { x:number;y:number } | undefined
+    if (inCross.length) {
+      ioNodes.push({ id: inNodeId, type: 'ioNode' as const, parentNode: group.id, draggable: true, position: inPos || { x: 8, y: 8 }, data: { kind: 'io-in', label: '入口', types: typesIn } })
+    }
+    if (outCross.length) {
+      const def = { x: Math.max(8, gWidth - 104), y: Math.max(8, gHeight - 36) }
+      ioNodes.push({ id: outNodeId, type: 'ioNode' as const, parentNode: group.id, draggable: true, position: outPos || def, data: { kind: 'io-out', label: '出口', types: typesOut } })
+    }
+    const remapEdgesIn = inCross.map((e, idx) => ({ id: `ioe-in-${idx}-${e.target}`, source: inNodeId, sourceHandle: `out-${inferType(e)}`, target: e.target, targetHandle: e.targetHandle, type: 'typed' as const, animated: true }))
+    const remapEdgesOut = outCross.map((e, idx) => ({ id: `ioe-out-${e.source}-${idx}`, source: e.source, sourceHandle: e.sourceHandle, target: outNodeId, targetHandle: `in-${inferType(e)}`, type: 'typed' as const, animated: true }))
+    return {
+      nodes: [...internalNodes, ...ioNodes],
+      edges: [...internalEdges, ...remapEdgesIn, ...remapEdgesOut],
+    }
+  }, [focusGroupId, nodes, edges])
+
   // Edge highlight when connected to a selected node
   const selectedIds = new Set(selectedNodes.map(n=>n.id))
   const viewEdges = useMemo(() => {
-    if (selectedIds.size === 0) return edges
-    return edges.map(e => {
+    const base = focusFiltered.edges
+    if (selectedIds.size === 0) return base
+    return base.map(e => {
       const active = selectedIds.has(e.source) || selectedIds.has(e.target)
       return active ? { ...e, style: { ...(e.style||{}), stroke: '#e5e7eb', opacity: 1 } } : { ...e, style: { ...(e.style||{}), opacity: 0.5 } }
     })
-  }, [edges, selectedIds])
+  }, [focusFiltered.edges, selectedIds])
 
   // 使用多选拖拽（内置），不自定义组拖拽，避免与画布交互冲突
 
@@ -434,9 +474,17 @@ function CanvasInner(): JSX.Element {
       onDragOver={onDragOver}
       onClick={handleRootClick}
       onMouseDown={handleRootMouseDown}
+      onDoubleClick={(e) => {
+        // double-click blank to go up one level in focus mode
+        const target = e.target as HTMLElement
+        if (!target.closest('.react-flow__node') && focusGroupId) {
+          exitGroupFocus()
+          setTimeout(() => rf.fitView?.({ padding: 0.2 }), 50)
+        }
+      }}
     >
       <ReactFlow
-        nodes={nodes}
+        nodes={focusFiltered.nodes}
         edges={viewEdges}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
@@ -450,6 +498,12 @@ function CanvasInner(): JSX.Element {
         onEdgeContextMenu={onEdgeContextMenu}
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
+        onNodeDoubleClick={(_evt, node) => {
+          if (node?.type === 'groupNode') {
+            useUIStore.getState().enterGroupFocus(node.id)
+            setTimeout(() => rf.fitView?.({ padding: 0.2 }), 50)
+          }
+        }}
         onPaneMouseDown={onPaneMouseDown}
         onPaneMouseMove={onPaneMouseMove}
         onPaneMouseUp={onPaneMouseUp}
@@ -488,7 +542,7 @@ function CanvasInner(): JSX.Element {
         }}
         snapToGrid
         snapGrid={[16, 16]}
-        defaultEdgeOptions={{ animated: true, type: 'typed', style: { strokeWidth: 3 }, interactionWidth: 24, markerEnd: { type: MarkerType.ArrowClosed, color: '#6b7280', width: 16, height: 16 } }}
+        defaultEdgeOptions={{ animated: true, type: (edgeRoute === 'orth' ? 'orth' : 'typed') as any, style: { strokeWidth: 3 }, interactionWidth: 24, markerEnd: { type: MarkerType.ArrowClosed, color: '#6b7280', width: 16, height: 16 } }}
         connectionLineType={ConnectionLineType.SmoothStep}
         connectionLineStyle={{ stroke: '#8b5cf6', strokeWidth: 3 }}
       >
@@ -496,6 +550,57 @@ function CanvasInner(): JSX.Element {
         <Controls position="bottom-left" />
         <Background gap={16} size={1} color="#2a2f3a" variant="dots" />
       </ReactFlow>
+      {/* Focus mode breadcrumb with hierarchy */}
+      {focusGroupId && (
+        <Paper withBorder shadow="sm" radius="xl" p={6} style={{ position: 'absolute', left: 12, top: 12 }}>
+          <Group gap={8} style={{ flexWrap: 'nowrap' }}>
+            {focusStack.map((gid, idx) => {
+              const n = nodes.find(nn => nn.id === gid)
+              const label = (n?.data as any)?.label || '组'
+              const isLast = idx === focusStack.length - 1
+              return (
+                <Group key={gid} gap={6} style={{ flexWrap: 'nowrap' }}>
+                  <Button size="xs" variant={isLast ? 'filled' : 'subtle'} onClick={() => {
+                    useUIStore.setState(s => ({ focusStack: s.focusStack.slice(0, idx + 1) }))
+                    setTimeout(()=> rf.fitView?.({ padding: 0.2 }), 50)
+                  }}>{label}</Button>
+                  {!isLast && <Text size="sm" c="dimmed">/</Text>}
+                </Group>
+              )
+            })}
+            <Divider orientation="vertical" style={{ height: 16 }} />
+            <Button size="xs" variant="subtle" onClick={()=>{ exitGroupFocus(); setTimeout(()=> rf.fitView?.({ padding: 0.2 }), 50) }}>上一级</Button>
+            <Button size="xs" variant="subtle" onClick={()=>{ exitAllFocus(); setTimeout(()=> rf.fitView?.({ padding: 0.2 }), 50) }}>退出聚焦</Button>
+          </Group>
+        </Paper>
+      )}
+      {/* Empty canvas guide */}
+      {nodes.length === 0 && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <Paper withBorder shadow="md" p="md" style={{ pointerEvents: 'auto', background: 'rgba(15,16,20,.9)' }}>
+            <Stack gap={8}>
+              <Text c="dimmed">快速开始</Text>
+              <Group gap={8} style={{ flexWrap: 'nowrap' }}>
+                <Button size="sm" onClick={() => { useRFStore.getState().addNode('taskNode', '文本转图像', { kind: 'textToImage' }) }}>新建 文本转图像</Button>
+                <Button size="sm" variant="light" onClick={() => {
+                  // create a small sample flow in center
+                  const center = rf.project?.({ x: window.innerWidth/2, y: window.innerHeight/2 }) || { x: 200, y: 200 }
+                  useRFStore.setState((s) => {
+                    const n1 = { id: `n${s.nextId}`, type: 'taskNode' as const, position: { x: center.x - 240, y: center.y - 60 }, data: { label: '文本转图像', kind: 'textToImage' } }
+                    const n2 = { id: `n${s.nextId+1}`, type: 'taskNode' as const, position: { x: center.x, y: center.y - 60 }, data: { label: '图像', kind: 'image' } }
+                    const n3 = { id: `n${s.nextId+2}`, type: 'taskNode' as const, position: { x: center.x + 260, y: center.y - 60 }, data: { label: '视频合成', kind: 'composeVideo' } }
+                    const e1 = { id: `e-${n1.id}-${n2.id}`, source: n1.id, target: n2.id, type: 'typed' as const, animated: true } as any
+                    const e2 = { id: `e-${n2.id}-${n3.id}`, source: n2.id, target: n3.id, type: 'typed' as const, animated: true } as any
+                    return { nodes: [n1, n2, n3], edges: [e1, e2], nextId: s.nextId + 3 }
+                  })
+                }}>创建示例工作流</Button>
+                <Button size="sm" variant="subtle" onClick={() => { toast('支持拖拽模板/资产到画布','success') }}>了解更多</Button>
+              </Group>
+              <Text size="xs" c="dimmed">提示：框选多个节点后按 ⌘/Ctrl+G 打组，⌘/Ctrl+Enter 一键运行。</Text>
+            </Stack>
+          </Paper>
+        </div>
+      )}
       {/* Group visuals moved to a real group node (compound). Legacy overlays removed. */}
       {groupRectFlow && (
         <>
@@ -506,6 +611,7 @@ function CanvasInner(): JSX.Element {
             <Group gap={6} style={{ flexWrap: 'nowrap' }}>
               <Text size="xs" c="dimmed">新建组</Text>
               <Divider orientation="vertical" style={{ height: 16 }} />
+              <Button size="xs" variant="subtle" onClick={() => autoLayoutSelectedDag()}>自动布局</Button>
               {/* pre-group state: no run button */}
               <Button size="xs" variant="subtle" onClick={layoutGrid}>宫格布局</Button>
               <Button size="xs" variant="subtle" onClick={layoutHorizontal}>水平布局</Button>
@@ -540,20 +646,42 @@ function CanvasInner(): JSX.Element {
             {menu.type === 'canvas' && (
               <>
                 <Button variant="subtle" onClick={() => { pasteFromClipboardAt(rf.screenToFlowPosition({ x: menu.x, y: menu.y })); setMenu(null) }}>在此粘贴</Button>
+                <Button variant="subtle" onClick={() => { autoLayoutAllDag(); setMenu(null) }}>自动布局（全图）</Button>
+                <Button variant="subtle" onClick={() => { useUIStore.getState().toggleEdgeRoute(); setMenu(null) }}>切换边线（当前：{edgeRoute==='orth'?'正交':'平滑'}）</Button>
+                {focusGroupId && <Button variant="subtle" onClick={() => { exitGroupFocus(); setMenu(null); setTimeout(()=> rf.fitView?.({ padding: 0.2 }), 50) }}>上一级</Button>}
+                {focusGroupId && <Button variant="subtle" onClick={() => { useUIStore.getState().exitAllFocus(); setMenu(null); setTimeout(()=> rf.fitView?.({ padding: 0.2 }), 50) }}>退出聚焦</Button>}
                 <Divider my={2} />
                 <Button variant="subtle" onClick={() => { useRFStore.getState().addNode('taskNode', '文本转图像', { kind: 'textToImage' }); setMenu(null) }}>新建 文本转图像</Button>
                 <Button variant="subtle" onClick={() => { useRFStore.getState().addNode('taskNode', '视频合成', { kind: 'composeVideo' }); setMenu(null) }}>新建 视频合成</Button>
               </>
             )}
-            {menu.type === 'node' && menu.id && (
-              <>
-                <Button variant="subtle" onClick={() => { duplicateNode(menu.id!); setMenu(null) }}>复制一份</Button>
-                <Button variant="subtle" color="red" onClick={() => { deleteNode(menu.id!); setMenu(null) }}>删除</Button>
-                <Divider my={2} />
-                <Button variant="subtle" onClick={() => { runSelected(); setMenu(null) }}>运行该节点</Button>
-                <Button variant="subtle" onClick={() => { cancelNode(menu.id!); setMenu(null) }}>停止该节点</Button>
-              </>
-            )}
+            {menu.type === 'node' && menu.id && (() => {
+              const target = nodes.find(n => n.id === menu.id)
+              const isGroup = target?.type === 'groupNode'
+              if (isGroup) {
+                const childIds = new Set(nodes.filter(n => n.parentNode === target!.id).map(n=>n.id))
+                return (
+                  <>
+                    <Button variant="subtle" onClick={async () => { await runFlowDag(2, useRFStore.getState, useRFStore.setState, { only: childIds }); setMenu(null) }}>运行该组</Button>
+                    <Button variant="subtle" onClick={() => { useRFStore.getState().autoLayoutForParent(target!.id); setMenu(null) }}>自动布局</Button>
+                    <Button variant="subtle" onClick={() => { useRFStore.getState().layoutGridSelected(); setMenu(null) }}>宫格布局</Button>
+                    <Button variant="subtle" onClick={() => { useRFStore.getState().layoutHorizontalSelected(); setMenu(null) }}>水平布局</Button>
+                    <Button variant="subtle" onClick={() => { enterGroupFocus(target!.id); setMenu(null); setTimeout(()=> rf.fitView?.({ padding: 0.2 }), 50) }}>进入组</Button>
+                    <Button variant="subtle" onClick={() => { useRFStore.getState().renameSelectedGroup(); setMenu(null) }}>重命名</Button>
+                    <Button variant="subtle" color="red" onClick={() => { useRFStore.getState().ungroupGroupNode(target!.id); setMenu(null) }}>解组</Button>
+                  </>
+                )
+              }
+              return (
+                <>
+                  <Button variant="subtle" onClick={() => { duplicateNode(menu.id!); setMenu(null) }}>复制一份</Button>
+                  <Button variant="subtle" color="red" onClick={() => { deleteNode(menu.id!); setMenu(null) }}>删除</Button>
+                  <Divider my={2} />
+                  <Button variant="subtle" onClick={() => { runSelected(); setMenu(null) }}>运行该节点</Button>
+                  <Button variant="subtle" onClick={() => { cancelNode(menu.id!); setMenu(null) }}>停止该节点</Button>
+                </>
+              )
+            })()}
             {menu.type === 'edge' && menu.id && (
               <Button variant="subtle" color="red" onClick={() => { deleteEdge(menu.id!); setMenu(null) }}>删除连线</Button>
             )}

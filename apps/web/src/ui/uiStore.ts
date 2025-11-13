@@ -23,6 +23,12 @@ type UIState = {
   preview: { url: string; kind: 'image'|'video'|'audio'; name?: string } | null
   openPreview: (m: { url: string; kind: 'image'|'video'|'audio'; name?: string }) => void
   closePreview: () => void
+  focusStack: string[]
+  enterGroupFocus: (id: string) => void
+  exitGroupFocus: () => void
+  exitAllFocus: () => void
+  edgeRoute: 'smooth' | 'orth'
+  toggleEdgeRoute: () => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -48,4 +54,10 @@ export const useUIStore = create<UIState>((set) => ({
   preview: null,
   openPreview: (m) => set({ preview: m }),
   closePreview: () => set({ preview: null }),
+  focusStack: [],
+  enterGroupFocus: (id) => set((s) => ({ focusStack: [...s.focusStack, id] })),
+  exitGroupFocus: () => set((s) => ({ focusStack: s.focusStack.slice(0, -1) })),
+  exitAllFocus: () => set({ focusStack: [] }),
+  edgeRoute: 'smooth',
+  toggleEdgeRoute: () => set((s) => ({ edgeRoute: s.edgeRoute === 'smooth' ? 'orth' : 'smooth' })),
 }))
