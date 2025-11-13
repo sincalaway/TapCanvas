@@ -295,12 +295,17 @@ function CanvasInner(): JSX.Element {
 
   // Group overlay computation
   const selectedNodes = nodes.filter(n=>n.selected)
+  const hasGroupNodeSelected = selectedNodes.some(n => (n as any).type === 'groupNode')
+  const parentIds = new Set(selectedNodes.map(n => (n.parentNode as string) || ''))
+  const allInsideSameGroup = selectedNodes.length > 1 && !parentIds.has('') && parentIds.size === 1
+  // Only show pre-group overlay for root-level multi-selection (not when a group is already formed or group node selected)
+  const showPreGroupOverlay = selectedNodes.length > 1 && !hasGroupNodeSelected && !allInsideSameGroup
   // legacy group match no longer used (compound nodes now)
   const groups = useRFStore(s => s.groups)
   const defaultW = 180, defaultH = 96
   // selection rect in FLOW coordinates
   let groupRectFlow: { x: number; y: number; w: number; h: number } | null = null
-  if (selectedNodes.length > 1) {
+  if (showPreGroupOverlay) {
     const minX = Math.min(...selectedNodes.map(n => n.position.x))
     const minY = Math.min(...selectedNodes.map(n => n.position.y))
     const maxX = Math.max(...selectedNodes.map(n => n.position.x + (((n as any).width) || defaultW)))
@@ -315,8 +320,10 @@ function CanvasInner(): JSX.Element {
   // selection partially overlaps existing groups?
   const selectionPartialOverlaps = useMemo(() => {
     if (selectedNodes.length < 2) return false
-    // disallow grouping across different parents
     const parents = new Set(selectedNodes.map(n => n.parentNode || ''))
+    // Do not treat selection within same group as valid for grouping
+    if (!parents.has('') && parents.size === 1) return true
+    // Disallow grouping across different parents
     return parents.size > 1
   }, [selectedNodes])
 
@@ -604,9 +611,20 @@ function CanvasInner(): JSX.Element {
       {/* Group visuals moved to a real group node (compound). Legacy overlays removed. */}
       {groupRectFlow && (
         <>
-          <div style={{ position: 'absolute', transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`, transformOrigin: '0 0', pointerEvents: 'none' }}>
-            <div style={{ position: 'absolute', left: groupRectFlow.x, top: groupRectFlow.y, width: groupRectFlow.w, height: groupRectFlow.h, borderRadius: 12, background: 'rgba(148,163,184,0.12)', border: '1px solid rgba(148,163,184,0.35)' }} />
-          </div>
+          {/* Selection outline in screen space to avoid transform artifacts */}
+          <div
+            style={{
+              position: 'absolute',
+              left: flowToScreen({ x: groupRectFlow.x, y: groupRectFlow.y }).x,
+              top: flowToScreen({ x: groupRectFlow.x, y: groupRectFlow.y }).y,
+              width: groupRectFlow.w * (viewport.zoom || 1),
+              height: groupRectFlow.h * (viewport.zoom || 1),
+              borderRadius: 12,
+              border: '1px dashed rgba(148,163,184,0.35)',
+              background: 'transparent',
+              pointerEvents: 'none'
+            }}
+          />
           <Paper withBorder shadow="sm" radius="xl" className="glass" p={4} style={{ position: 'absolute', left: flowToScreen({ x: groupRectFlow.x, y: groupRectFlow.y }).x, top: flowToScreen({ x: groupRectFlow.x, y: groupRectFlow.y }).y - 36, pointerEvents: 'auto', whiteSpace: 'nowrap', overflowX: 'auto' }}>
             <Group gap={6} style={{ flexWrap: 'nowrap' }}>
               <Text size="xs" c="dimmed">新建组</Text>

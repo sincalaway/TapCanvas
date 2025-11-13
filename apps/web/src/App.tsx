@@ -1,5 +1,5 @@
 import React from 'react'
-import { AppShell, ActionIcon, Group, Title, Box, Button, TextInput, Select, Badge } from '@mantine/core'
+import { AppShell, ActionIcon, Group, Title, Box, Button, TextInput, Select, Badge, Avatar, Modal, Stack, Text } from '@mantine/core'
 import { IconBrandGithub } from '@tabler/icons-react'
 import Canvas from './canvas/Canvas'
 import GithubGate from './auth/GithubGate'
@@ -9,8 +9,9 @@ import KeyboardShortcuts from './KeyboardShortcuts'
 import { applyTemplate, captureCurrentSelection, deleteTemplate, listTemplateNames, saveTemplate, renameTemplate } from './templates'
 import { ToastHost, toast } from './ui/toast'
 import { useUIStore } from './ui/uiStore'
-import { saveServerFlow } from './api/server'
+import { saveServerFlow, listFlowVersions, rollbackFlow, getServerFlow } from './api/server'
 import { saveFlow as saveLocalFlow } from './flows/registry'
+import { useAuth } from './auth/store'
 import SubflowEditor from './subflow/Editor'
 import LibraryEditor from './flows/LibraryEditor'
 import { listFlows, saveFlow, deleteFlow as deleteLibraryFlow, renameFlow, scanCycles } from './flows/registry'
@@ -33,6 +34,9 @@ export default function App(): JSX.Element {
   const setDirty = useUIStore(s => s.setDirty)
   const setCurrentFlow = useUIStore(s => s.setCurrentFlow)
   const rfState = useRFStore()
+  const auth = useAuth()
+  const [showHistory, setShowHistory] = React.useState(false)
+  const [versions, setVersions] = React.useState<Array<{ id: string; createdAt: string; name: string }>>([])
 
   React.useEffect(() => {
     const beforeUnload = (e: BeforeUnloadEvent) => {
@@ -80,6 +84,16 @@ export default function App(): JSX.Element {
             <Select size="xs" data={[{value:'local',label:'本地'},{value:'server',label:'服务端'}]} value={currentFlow.source} onChange={(v)=> setCurrentFlow({ source: (v as any)||'local' })} allowDeselect={false} style={{ width: 110 }} />
             <TextInput size="xs" placeholder="名称" value={currentFlow.name} onChange={(e)=> setCurrentFlow({ name: e.currentTarget.value })} style={{ width: 200 }} />
             <Button size="xs" onClick={doSave} disabled={!isDirty}>保存</Button>
+            {currentFlow.source === 'server' && currentFlow.id && (
+              <Button size="xs" variant="light" onClick={async ()=>{ setShowHistory(true); try { setVersions(await listFlowVersions(currentFlow.id!)) } catch { setVersions([]) } }}>历史</Button>
+            )}
+            {auth.user ? (
+              <Group gap={6}>
+                <Avatar size={24} src={auth.user.avatarUrl} alt={auth.user.login} />
+                <Text size="sm">{auth.user.login}</Text>
+                <Button size="xs" variant="subtle" onClick={()=> auth.clear()}>退出</Button>
+              </Group>
+            ) : null}
             <ActionIcon component="a" href="https://github.com/anymouschina/TapCanvas" target="_blank" rel="noopener noreferrer" variant="subtle" aria-label="GitHub">
               <IconBrandGithub size={18} />
             </ActionIcon>
@@ -114,6 +128,26 @@ export default function App(): JSX.Element {
       <PreviewModal />
       {subflowNodeId && (<SubflowEditor nodeId={subflowNodeId} onClose={closeSubflow} />)}
       {libraryFlowId && (<LibraryEditor flowId={libraryFlowId} onClose={closeLibraryFlow} />)}
+      <Modal opened={showHistory} onClose={()=>setShowHistory(false)} title="保存历史" size="lg" centered>
+        <Stack>
+          {versions.length === 0 && <Text size="sm" c="dimmed">暂无历史</Text>}
+          {versions.map(v => (
+            <Group key={v.id} justify="space-between">
+              <Text size="sm">{new Date(v.createdAt).toLocaleString()} - {v.name}</Text>
+              <Button size="xs" variant="light" onClick={async ()=>{
+                if (!confirm('回滚到该版本？当前更改将丢失')) return
+                await rollbackFlow(currentFlow.id!, v.id)
+                const r = await getServerFlow(currentFlow.id!)
+                const data: any = r?.data || {}
+                useRFStore.setState({ nodes: Array.isArray(data.nodes)?data.nodes:[], edges: Array.isArray(data.edges)?data.edges:[] })
+                setCurrentFlow({ name: r.name })
+                setDirty(false)
+                setShowHistory(false)
+              }}>回滚</Button>
+            </Group>
+          ))}
+        </Stack>
+      </Modal>
     </AppShell>
   )
 }

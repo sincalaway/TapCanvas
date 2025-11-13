@@ -20,6 +20,7 @@ export default function LibraryEditor({ flowId, onClose }: Props) {
   const [localList, setLocalList] = useState(listFlows())
   const [versions, setVersions] = useState<Array<{ id: string; createdAt: string; name: string }>>([])
   const [showHistory, setShowHistory] = useState(false)
+  const [dirty, setDirty] = useState(false)
 
   // Load initial
   useEffect(() => {
@@ -27,6 +28,7 @@ export default function LibraryEditor({ flowId, onClose }: Props) {
     if (r) {
       setNodes(r.nodes); setEdges(r.edges); setName(r.name); setIo(r.io || { inputs: [], outputs: [] })
       setSource('local'); setCurrentId(flowId)
+      setDirty(false)
     }
   }, [flowId])
 
@@ -35,6 +37,8 @@ export default function LibraryEditor({ flowId, onClose }: Props) {
     setLocalList(listFlows())
     listServerFlows().then(setServerList).catch(()=>setServerList([]))
   }, [])
+
+  useEffect(() => { setDirty(true) }, [nodes, edges, name])
 
   const onNodesChange = useCallback((changes: any[]) => setNodes((nds) => applyNodeChanges(changes, nds)), [])
   const onEdgesChange = useCallback((changes: any[]) => setEdges((eds) => applyEdgeChanges(changes, eds)), [])
@@ -52,6 +56,7 @@ export default function LibraryEditor({ flowId, onClose }: Props) {
       setServerList(await listServerFlows())
       setCurrentId(saved.id)
     }
+    setDirty(false)
     onClose()
   }
 
@@ -80,6 +85,7 @@ export default function LibraryEditor({ flowId, onClose }: Props) {
     } else {
       await deleteServerFlow(currentId); setServerList(await listServerFlows())
     }
+    setDirty(false)
     onClose()
   }
 
@@ -124,7 +130,7 @@ export default function LibraryEditor({ flowId, onClose }: Props) {
               <Button size="xs" variant="light" onClick={saveAs}>另存为</Button>
               {source === 'server' && <Button size="xs" variant="light" onClick={async ()=>{ setShowHistory(true); try { setVersions(await listFlowVersions(currentId)) } catch { setVersions([]) } }}>历史</Button>}
               <Button size="xs" variant="light" color="red" onClick={removeCurrent}>删除</Button>
-              <Button size="xs" variant="light" onClick={onClose}>关闭</Button>
+              <Button size="xs" variant="light" onClick={()=>{ if (dirty && !confirm('有未保存更改，确定关闭？')) return; onClose() }}>关闭</Button>
             </Group>
           </div>
           <div style={{ height: '100%' }}>
