@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards, Req } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Post, UseGuards, Req, Query } from '@nestjs/common'
 import { FlowService } from './flow.service'
 import { JwtGuard } from '../auth/jwt.guard'
 
@@ -8,8 +8,8 @@ export class FlowController {
 
   @UseGuards(JwtGuard)
   @Get()
-  list(@Req() req: any) {
-    return this.service.list(String(req.user.sub))
+  list(@Req() req: any, @Query('projectId') projectId?: string) {
+    return this.service.list(String(req.user.sub), projectId || undefined)
   }
 
   @UseGuards(JwtGuard)

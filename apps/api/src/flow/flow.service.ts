@@ -5,8 +5,8 @@ import { PrismaService } from 'nestjs-prisma'
 export class FlowService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(userId: string) {
-    return this.prisma.flow.findMany({ where: { ownerId: String(userId) }, orderBy: { updatedAt: 'desc' } })
+  list(userId: string, projectId?: string) {
+    return this.prisma.flow.findMany({ where: { ownerId: String(userId), ...(projectId ? { projectId } : {}) }, orderBy: { updatedAt: 'desc' } })
   }
 
   get(id: string, userId: string) {

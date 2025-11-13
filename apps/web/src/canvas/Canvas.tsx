@@ -599,14 +599,16 @@ function CanvasInner(): JSX.Element {
               {/* pre-group state: no run button */}
               <Button size="xs" variant="subtle" onClick={layoutGrid}>宫格布局</Button>
               <Button size="xs" variant="subtle" onClick={layoutHorizontal}>水平布局</Button>
-              <Button size="xs" variant="subtle" onClick={()=>{
-                const name = prompt('保存为资产名称：')?.trim();
-                if (!name) return;
+              <Button size="xs" variant="subtle" onClick={async ()=>{
+                const name = prompt('保存为资产名称：')?.trim(); if (!name) return;
                 const sel = nodes.filter(n=>n.selected)
                 const setIds = new Set(sel.map(n=>n.id))
                 const es = edges.filter(e=> setIds.has(e.source) && setIds.has(e.target))
-                const { saveAsset } = require('../assets/registry') as any
-                saveAsset({ name, nodes: sel, edges: es })
+                const data = { nodes: sel, edges: es }
+                const proj = useUIStore.getState().currentProject
+                if (!proj?.id) { alert('请先选择或创建项目'); return }
+                const { createServerAsset } = await import('../api/server')
+                await createServerAsset({ projectId: proj.id!, name, data })
               }}>创建资产</Button>
               {!selectionPartialOverlaps && (
                 <Button size="xs" variant="subtle" onClick={()=>{

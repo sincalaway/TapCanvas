@@ -1,7 +1,7 @@
 import React from 'react'
 import { Paper, Title, Tabs, SimpleGrid, Card, Image, Text, Button, Group, Badge, Stack, Transition } from '@mantine/core'
 import { useUIStore } from './uiStore'
-import { listServerFlows, type FlowDto } from '../api/server'
+import { listServerFlows, listProjectFlows, type FlowDto } from '../api/server'
 import { useRFStore } from '../canvas/store'
 
 const publicTemplates = [
@@ -21,14 +21,16 @@ export default function TemplatePanel(): JSX.Element | null {
   const setActivePanel = useUIStore(s => s.setActivePanel)
   const anchorY = useUIStore(s => s.panelAnchorY)
   const addNode = useRFStore(s => s.addNode)
+  const currentProject = useUIStore(s => s.currentProject)
   const [serverFlows, setServerFlows] = React.useState<FlowDto[]|null>(null)
   React.useEffect(() => {
     let alive = true
     if (active === 'template') {
-      listServerFlows().then(list => { if (alive) setServerFlows(list) }).catch(()=>{ if (alive) setServerFlows([]) })
+      const loader = currentProject?.id ? listProjectFlows(currentProject.id) : listServerFlows()
+      loader.then(list => { if (alive) setServerFlows(list) }).catch(()=>{ if (alive) setServerFlows([]) })
     }
     return () => { alive = false }
-  }, [active])
+  }, [active, currentProject?.id])
   const mounted = active === 'template'
   if (!mounted) return null
   return (

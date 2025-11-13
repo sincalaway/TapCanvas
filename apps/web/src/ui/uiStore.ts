@@ -33,6 +33,8 @@ type UIState = {
   setCurrentFlow: (patch: Partial<{ id?: string|null; name: string; source: 'local'|'server' }>) => void
   isDirty: boolean
   setDirty: (v: boolean) => void
+  currentProject: { id?: string|null; name: string } | null
+  setCurrentProject: (p: { id?: string|null; name: string } | null) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -68,4 +70,6 @@ export const useUIStore = create<UIState>((set) => ({
   setCurrentFlow: (patch) => set((s) => ({ currentFlow: { ...s.currentFlow, ...(patch||{}) } })),
   isDirty: false,
   setDirty: (v) => set({ isDirty: v }),
+  currentProject: null,
+  setCurrentProject: (p) => set({ currentProject: p }),
 }))

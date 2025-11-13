@@ -9,7 +9,7 @@ import KeyboardShortcuts from './KeyboardShortcuts'
 import { applyTemplate, captureCurrentSelection, deleteTemplate, listTemplateNames, saveTemplate, renameTemplate } from './templates'
 import { ToastHost, toast } from './ui/toast'
 import { useUIStore } from './ui/uiStore'
-import { saveServerFlow, listFlowVersions, rollbackFlow, getServerFlow } from './api/server'
+import { saveProjectFlow, listFlowVersions, rollbackFlow, getServerFlow, listProjects, upsertProject, type ProjectDto } from './api/server'
 import { useAuth } from './auth/store'
 import SubflowEditor from './subflow/Editor'
 import LibraryEditor from './flows/LibraryEditor'
@@ -31,6 +31,9 @@ export default function App(): JSX.Element {
   const [refresh, setRefresh] = React.useState(0)
   const setActivePanel = useUIStore(s => s.setActivePanel)
   const { currentFlow, isDirty } = useUIStore()
+  const currentProject = useUIStore(s => s.currentProject)
+  const setCurrentProject = useUIStore(s => s.setCurrentProject)
+  const [projects, setProjects] = React.useState<ProjectDto[]>([])
   const setDirty = useUIStore(s => s.setDirty)
   const setCurrentFlow = useUIStore(s => s.setCurrentFlow)
   const rfState = useRFStore()
@@ -48,15 +51,27 @@ export default function App(): JSX.Element {
     return () => window.removeEventListener('beforeunload', beforeUnload)
   }, [])
 
+  React.useEffect(() => { listProjects().then((ps)=>{
+    setProjects(ps)
+    if (!useUIStore.getState().currentProject && ps.length) setCurrentProject({ id: ps[0].id, name: ps[0].name })
+  }).catch(()=>{}) }, [setCurrentProject])
+
   // mark dirty on any node/edge change via polling change (simple and safe)
   React.useEffect(() => { setDirty(true) }, [rfState.nodes, rfState.edges, setDirty])
 
   const doSave = async () => {
-    const name = currentFlow.name?.trim() || prompt('工作流名称：')?.trim() || '未命名'
+    // 确保项目存在
+    let proj = useUIStore.getState().currentProject
+    if (!proj?.id) {
+      const name = prompt('项目名称：')?.trim(); if (!name) return
+      const p = await upsertProject({ name }); setProjects([p, ...projects]); setCurrentProject({ id: p.id, name: p.name }); proj = { id: p.id, name: p.name }
+    }
+    // 项目即工作流：名称使用项目名
+    const flowName = proj!.name || '未命名'
     const nodes = useRFStore.getState().nodes
     const edges = useRFStore.getState().edges
-    const saved = await saveServerFlow({ id: currentFlow.id || undefined, name, nodes, edges })
-    setCurrentFlow({ id: saved.id, name, source: 'server' })
+    const saved = await saveProjectFlow({ id: currentFlow.id || undefined, projectId: proj!.id!, name: flowName, nodes, edges })
+    setCurrentFlow({ id: saved.id, name: flowName, source: 'server' })
     setDirty(false)
   }
 
@@ -76,7 +91,7 @@ export default function App(): JSX.Element {
             {isDirty && (<Badge color="red" variant="light">未保存</Badge>)}
           </Group>
           <Group gap="xs">
-            <TextInput size="xs" placeholder="名称" value={currentFlow.name} onChange={(e)=> setCurrentFlow({ name: e.currentTarget.value })} style={{ width: 200 }} />
+            <TextInput size="xs" placeholder="项目名" value={currentProject?.name || ''} onChange={(e)=> setCurrentProject({ ...(currentProject||{}), name: e.currentTarget.value })} style={{ width: 220 }} onBlur={async ()=>{ if (currentProject?.id && currentProject.name) await upsertProject({ id: currentProject.id, name: currentProject.name }) }} />
             <Button size="xs" onClick={doSave} disabled={!isDirty}>保存</Button>
             {currentFlow.id && (
               <Button size="xs" variant="light" onClick={async ()=>{ setShowHistory(true); try { setVersions(await listFlowVersions(currentFlow.id!)) } catch { setVersions([]) } }}>历史</Button>

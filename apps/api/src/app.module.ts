@@ -5,9 +5,10 @@ import { PrismaModule } from 'nestjs-prisma';
 import { FlowModule } from './flow/flow.module';
 import { AuthModule } from './auth/auth.module';
 import { ProjectModule } from './project/project.module';
+import { AssetModule } from './asset/asset.module';
 
 @Module({
-  imports: [PrismaModule.forRoot({ isGlobal: true }), AuthModule, ProjectModule, FlowModule],
+  imports: [PrismaModule.forRoot({ isGlobal: true }), AuthModule, ProjectModule, AssetModule, FlowModule],
   controllers: [AppController],
   providers: [AppService],
 })
