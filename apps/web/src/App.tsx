@@ -1,5 +1,6 @@
 import React from 'react'
 import { AppShell, ActionIcon, Group, Title, Box, Button, TextInput, Badge, Modal, Stack, Text, Select } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
 import { IconBrandGithub } from '@tabler/icons-react'
 import Canvas from './canvas/Canvas'
 import GithubGate from './auth/GithubGate'
@@ -41,6 +42,7 @@ export default function App(): JSX.Element {
   const auth = useAuth()
   const [showHistory, setShowHistory] = React.useState(false)
   const [versions, setVersions] = React.useState<Array<{ id: string; createdAt: string; name: string }>>([])
+  const [saving, setSaving] = React.useState(false)
 
   React.useEffect(() => {
     const beforeUnload = (e: BeforeUnloadEvent) => {
@@ -86,19 +88,39 @@ export default function App(): JSX.Element {
   React.useEffect(() => { setDirty(true) }, [rfState.nodes, rfState.edges, setDirty])
 
   const doSave = async () => {
-    // 确保项目存在
+    if (saving) return
+    // 确保项目存在；若无则直接在此创建
     let proj = useUIStore.getState().currentProject
     if (!proj?.id) {
-      const name = prompt('项目名称：')?.trim(); if (!name) return
-      const p = await upsertProject({ name }); setProjects([p, ...projects]); setCurrentProject({ id: p.id, name: p.name }); proj = { id: p.id, name: p.name }
+      const name = (currentProject?.name || prompt('新建项目名称：') || '').trim()
+      if (!name) { notifications.show({ title: '未填写项目名', message: '请输入项目名称后重试', color: 'yellow' }); return }
+      try {
+        const p = await upsertProject({ name })
+        setProjects(prev => [p, ...prev])
+        setCurrentProject({ id: p.id, name: p.name })
+        proj = { id: p.id, name: p.name }
+      } catch (e:any) {
+        notifications.show({ title: '创建项目失败', message: e?.message || '网络或服务器错误', color: 'red' })
+        return
+      }
     }
     // 项目即工作流：名称使用项目名
     const flowName = proj!.name || '未命名'
     const nodes = useRFStore.getState().nodes
     const edges = useRFStore.getState().edges
-    const saved = await saveProjectFlow({ id: currentFlow.id || undefined, projectId: proj!.id!, name: flowName, nodes, edges })
-    setCurrentFlow({ id: saved.id, name: flowName, source: 'server' })
-    setDirty(false)
+    const nid = 'saving-' + Date.now()
+    notifications.show({ id: nid, title: '保存中', message: '正在保存当前项目…', loading: true, autoClose: false, withCloseButton: false })
+    setSaving(true)
+    try {
+      const saved = await saveProjectFlow({ id: currentFlow.id || undefined, projectId: proj!.id!, name: flowName, nodes, edges })
+      setCurrentFlow({ id: saved.id, name: flowName, source: 'server' })
+      setDirty(false)
+      notifications.update({ id: nid, title: '已保存', message: `项目「${proj!.name}」已保存`, loading: false, autoClose: 1500, color: 'green' })
+    } catch (e: any) {
+      notifications.update({ id: nid, title: '保存失败', message: e?.message || '网络或服务器错误', loading: false, autoClose: 3000, color: 'red' })
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -118,7 +140,7 @@ export default function App(): JSX.Element {
           </Group>
           <Group gap="xs">
             <TextInput size="xs" placeholder="项目名" value={currentProject?.name || ''} onChange={(e)=> setCurrentProject({ ...(currentProject||{}), name: e.currentTarget.value })} style={{ width: 260 }} onBlur={async ()=>{ if (currentProject?.id && currentProject.name) await upsertProject({ id: currentProject.id, name: currentProject.name }) }} />
-            <Button size="xs" onClick={doSave} disabled={!isDirty}>保存</Button>
+            <Button size="xs" onClick={doSave} disabled={!isDirty} loading={saving}>保存</Button>
             {currentFlow.id && (
               <Button size="xs" variant="light" onClick={async ()=>{ setShowHistory(true); try { setVersions(await listFlowVersions(currentFlow.id!)) } catch { setVersions([]) } }}>历史</Button>
             )}
