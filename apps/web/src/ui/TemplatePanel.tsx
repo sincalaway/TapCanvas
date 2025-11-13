@@ -2,6 +2,7 @@ import React from 'react'
 import { Paper, Title, Tabs, SimpleGrid, Card, Image, Text, Button, Group, Badge, Stack, Transition } from '@mantine/core'
 import { useUIStore } from './uiStore'
 import { listFlows } from '../flows/registry'
+import { listServerFlows, type FlowDto } from '../api/server'
 import { useRFStore } from '../canvas/store'
 
 const publicTemplates = [
@@ -22,6 +23,14 @@ export default function TemplatePanel(): JSX.Element | null {
   const anchorY = useUIStore(s => s.panelAnchorY)
   const addNode = useRFStore(s => s.addNode)
   const flows = listFlows()
+  const [serverFlows, setServerFlows] = React.useState<FlowDto[]|null>(null)
+  React.useEffect(() => {
+    let alive = true
+    if (active === 'template') {
+      listServerFlows().then(list => { if (alive) setServerFlows(list) }).catch(()=>{ if (alive) setServerFlows([]) })
+    }
+    return () => { alive = false }
+  }, [active])
   const mounted = active === 'template'
   if (!mounted) return null
   return (
@@ -42,7 +51,8 @@ export default function TemplatePanel(): JSX.Element | null {
         <Tabs defaultValue="public">
           <Tabs.List>
             <Tabs.Tab value="public">公共工作流</Tabs.Tab>
-            <Tabs.Tab value="mine">我的工作流</Tabs.Tab>
+            <Tabs.Tab value="mine">我的工作流(本地)</Tabs.Tab>
+            <Tabs.Tab value="server">我的工作流(服务端)</Tabs.Tab>
           </Tabs.List>
           <Tabs.Panel value="public" pt="xs">
             <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
@@ -70,6 +80,23 @@ export default function TemplatePanel(): JSX.Element | null {
                 </Card>
               ))}
             </SimpleGrid>
+          </Tabs.Panel>
+          <Tabs.Panel value="server" pt="xs">
+            {serverFlows === null && (<Text size="xs" c="dimmed">载入中...</Text>)}
+            {serverFlows && serverFlows.length === 0 && (<Text size="xs" c="dimmed">服务端暂无工作流</Text>)}
+            {serverFlows && (
+              <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
+                {serverFlows.map((f) => (
+                  <Card key={f.id} withBorder radius="md" shadow="sm">
+                    <PlaceholderImage label={f.name} />
+                    <Group justify="space-between" mt="sm">
+                      <Text size="sm">{f.name}</Text>
+                      <Button size="xs" variant="light" onClick={() => { addNode('taskNode', f.name, { kind: 'subflow', subflowRef: f.id }); setActivePanel(null) }}>引用</Button>
+                    </Group>
+                  </Card>
+                ))}
+              </SimpleGrid>
+            )}
           </Tabs.Panel>
         </Tabs>
             </Paper>

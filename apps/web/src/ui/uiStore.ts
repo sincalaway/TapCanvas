@@ -29,6 +29,10 @@ type UIState = {
   exitAllFocus: () => void
   edgeRoute: 'smooth' | 'orth'
   toggleEdgeRoute: () => void
+  currentFlow: { id?: string|null; name: string; source: 'local'|'server' }
+  setCurrentFlow: (patch: Partial<{ id?: string|null; name: string; source: 'local'|'server' }>) => void
+  isDirty: boolean
+  setDirty: (v: boolean) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -60,4 +64,8 @@ export const useUIStore = create<UIState>((set) => ({
   exitAllFocus: () => set({ focusStack: [] }),
   edgeRoute: 'smooth',
   toggleEdgeRoute: () => set((s) => ({ edgeRoute: s.edgeRoute === 'smooth' ? 'orth' : 'smooth' })),
+  currentFlow: { id: null, name: '未命名', source: 'local' },
+  setCurrentFlow: (patch) => set((s) => ({ currentFlow: { ...s.currentFlow, ...(patch||{}) } })),
+  isDirty: false,
+  setDirty: (v) => set({ isDirty: v }),
 }))

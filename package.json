@@ -10,10 +10,15 @@
   "scripts": {
     "tap": "node packages/cli/bin/tapcanvas.js",
     "dev:web": "pnpm --filter @tapcanvas/web dev",
+    "dev:api": "pnpm --filter api start:dev",
     "build": "pnpm -w -r run build",
+    "build:api": "pnpm --filter api build",
     "test": "pnpm -w -r run test",
     "compose:up": "cd infra/activepieces && docker compose up -d",
     "compose:down": "cd infra/activepieces && docker compose down",
     "compose:logs": "cd infra/activepieces && docker compose logs -f"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.10"
   }
 }
