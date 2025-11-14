@@ -17,6 +17,11 @@ export class ModelController {
     return this.service.listTokens(id, String(req.user.sub))
   }
 
+  @Get('providers/:id/endpoints')
+  listEndpoints(@Param('id') id: string, @Req() req: any) {
+    return this.service.listEndpoints(id, String(req.user.sub))
+  }
+
   @Post('providers')
   upsertProvider(@Body() body: { id?: string; name: string; vendor: string; baseUrl?: string | null }, @Req() req: any) {
     return this.service.upsertProvider(body, String(req.user.sub))
@@ -33,6 +38,7 @@ export class ModelController {
       enabled?: boolean
       userAgent?: string | null
     },
+    @Req() req: any,
   ) {
     return this.service.upsertToken(body, String(req.user.sub))
   }
@@ -40,5 +46,20 @@ export class ModelController {
   @Delete('tokens/:id')
   deleteToken(@Param('id') id: string, @Req() req: any) {
     return this.service.deleteToken(id, String(req.user.sub))
+  }
+
+  @Post('endpoints')
+  upsertEndpoint(
+    @Body()
+    body: {
+      id?: string
+      providerId: string
+      key: string
+      label: string
+      baseUrl: string
+    },
+    @Req() req: any,
+  ) {
+    return this.service.upsertEndpoint(body, String(req.user.sub))
   }
 }

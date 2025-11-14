@@ -11,6 +11,7 @@ export type FlowDto = { id: string; name: string; data: { nodes: Node[]; edges: 
 export type ProjectDto = { id: string; name: string; createdAt: string; updatedAt: string }
 export type ModelProviderDto = { id: string; name: string; vendor: string; baseUrl?: string | null }
 export type ModelTokenDto = { id: string; providerId: string; label: string; secretToken: string; userAgent?: string | null; enabled: boolean }
+export type ModelEndpointDto = { id: string; providerId: string; key: string; label: string; baseUrl: string }
 
 export async function listServerFlows(): Promise<FlowDto[]> {
   const r = await fetch(`${API_BASE}/flows`, withAuth())
@@ -116,6 +117,52 @@ export async function upsertModelToken(payload: { id?: string; providerId: strin
 export async function deleteModelToken(id: string): Promise<void> {
   const r = await fetch(`${API_BASE}/models/tokens/${encodeURIComponent(id)}`, withAuth({ method: 'DELETE' }))
   if (!r.ok) throw new Error(`delete token failed: ${r.status}`)
+}
+
+export async function listModelEndpoints(providerId: string): Promise<ModelEndpointDto[]> {
+  const r = await fetch(`${API_BASE}/models/providers/${encodeURIComponent(providerId)}/endpoints`, withAuth())
+  if (!r.ok) throw new Error(`list endpoints failed: ${r.status}`)
+  return r.json()
+}
+
+export async function upsertModelEndpoint(payload: {
+  id?: string
+  providerId: string
+  key: string
+  label: string
+  baseUrl: string
+}): Promise<ModelEndpointDto> {
+  const r = await fetch(`${API_BASE}/models/endpoints`, withAuth({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }))
+  if (!r.ok) throw new Error(`save endpoint failed: ${r.status}`)
+  return r.json()
+}
+
+export type SoraDraftItemDto = {
+  id: string
+  kind: string
+  title: string | null
+  prompt: string | null
+  width: number | null
+  height: number | null
+  generationType: string | null
+  createdAt: number | null
+  thumbnailUrl: string | null
+  videoUrl: string | null
+  platform: 'sora'
+}
+
+export type SoraDraftListDto = { items: SoraDraftItemDto[]; cursor: string | null }
+
+export async function listSoraDrafts(tokenId: string, cursor?: string | null): Promise<SoraDraftListDto> {
+  const qs = new URLSearchParams({ tokenId })
+  if (cursor) qs.set('cursor', cursor)
+  const r = await fetch(`${API_BASE}/sora/drafts?${qs.toString()}`, withAuth())
+  if (!r.ok) throw new Error(`list drafts failed: ${r.status}`)
+  return r.json()
 }
 
 // Assets API

@@ -1,8 +1,19 @@
 import React from 'react'
-import { Paper, Title, SimpleGrid, Card, Image, Text, Button, Group, Stack, Transition } from '@mantine/core'
+import { Paper, Title, SimpleGrid, Card, Image, Text, Button, Group, Stack, Transition, Tabs, Select } from '@mantine/core'
 import { useRFStore } from '../canvas/store'
 import { useUIStore } from './uiStore'
-import { listServerAssets, createServerAsset, deleteServerAsset, renameServerAsset, type ServerAssetDto } from '../api/server'
+import {
+  listServerAssets,
+  createServerAsset,
+  deleteServerAsset,
+  renameServerAsset,
+  listModelProviders,
+  listModelTokens,
+  listSoraDrafts,
+  type ServerAssetDto,
+  type ModelProviderDto,
+  type ModelTokenDto,
+} from '../api/server'
 
 function PlaceholderImage({ label }: { label: string }) {
   const svg = encodeURIComponent(`<?xml version="1.0" encoding="UTF-8"?><svg xmlns='http://www.w3.org/2000/svg' width='480' height='270'><defs><linearGradient id='g' x1='0' x2='1'><stop offset='0%' stop-color='#1f2937'/><stop offset='100%' stop-color='#0b0b0d'/></linearGradient></defs><rect width='100%' height='100%' fill='url(#g)'/><text x='50%' y='50%' fill='#e5e7eb' dominant-baseline='middle' text-anchor='middle' font-size='16' font-family='system-ui'>${label}</text></svg>`) 
@@ -17,10 +28,69 @@ export default function AssetPanel(): JSX.Element | null {
   const mounted = active === 'assets'
   const currentProject = useUIStore(s => s.currentProject)
   const [assets, setAssets] = React.useState<ServerAssetDto[]>([])
+  const [tab, setTab] = React.useState<'local' | 'sora'>('local')
+  const [soraProviders, setSoraProviders] = React.useState<ModelProviderDto[]>([])
+  const [soraTokens, setSoraTokens] = React.useState<ModelTokenDto[]>([])
+  const [selectedTokenId, setSelectedTokenId] = React.useState<string | null>(null)
+  const [drafts, setDrafts] = React.useState<any[]>([])
+  const [draftCursor, setDraftCursor] = React.useState<string | null>(null)
+  const [draftLoading, setDraftLoading] = React.useState(false)
   React.useEffect(() => {
     const loader = currentProject?.id ? listServerAssets(currentProject.id) : Promise.resolve([])
-    loader.then(setAssets).catch(()=>setAssets([]))
+    loader.then(setAssets).catch(() => setAssets([]))
   }, [currentProject?.id, mounted])
+
+  React.useEffect(() => {
+    if (!mounted) return
+    listModelProviders()
+      .then((ps) => {
+        const soras = ps.filter((p) => p.vendor === 'sora')
+        setSoraProviders(soras)
+        return soras[0]
+      })
+      .then(async (sora) => {
+        if (!sora) {
+          setSoraTokens([])
+          setDrafts([])
+          setSelectedTokenId(null)
+          return
+        }
+        const tokens = await listModelTokens(sora.id)
+        setSoraTokens(tokens)
+        if (tokens.length > 0) {
+          setSelectedTokenId(tokens[0].id)
+          try {
+            const data = await listSoraDrafts(tokens[0].id)
+            setDrafts(data.items || [])
+            setDraftCursor(data.cursor || null)
+          } catch {
+            setDrafts([])
+            setDraftCursor(null)
+          }
+        }
+      })
+      .catch(() => {
+        setSoraProviders([])
+        setSoraTokens([])
+        setDrafts([])
+        setSelectedTokenId(null)
+        setDraftCursor(null)
+      })
+  }, [mounted])
+
+  const loadMoreDrafts = async () => {
+    if (!selectedTokenId || !draftCursor) return
+    setDraftLoading(true)
+    try {
+      const data = await listSoraDrafts(selectedTokenId, draftCursor)
+      setDrafts(prev => [...prev, ...(data.items || [])])
+      setDraftCursor(data.cursor || null)
+    } catch {
+      // ignore, keep existing drafts
+    } finally {
+      setDraftLoading(false)
+    }
+  }
   if (!mounted) return null
 
   const applyAssetAt = (assetId: string, pos: { x: number; y: number }) => {
@@ -47,24 +117,95 @@ export default function AssetPanel(): JSX.Element | null {
               <Group justify="space-between" mb={8} style={{ position: 'sticky', top: 0, zIndex: 1, background: 'transparent' }}>
                 <Title order={6}>我的资产（项目：{currentProject?.name || '未选择'}）</Title>
               </Group>
-              <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-              {assets.length === 0 && (<Text size="xs" c="dimmed">暂无资产</Text>)}
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-              {assets.map(a => (
-                <Card key={a.id} withBorder radius="md" shadow="sm">
-                  <PlaceholderImage label={a.name} />
-                  <Group justify="space-between" mt="sm">
-                    <Text size="sm">{a.name}</Text>
-                    <Group gap={6}>
-                        <Button size="xs" variant="light" onClick={()=>{ const pos = { x: 200, y: (anchorY||200) }; applyAssetAt(a.id, pos); setActivePanel(null) }}>添加</Button>
-                        <Button size="xs" variant="subtle" onClick={async ()=>{ const next = prompt('重命名：', a.name)?.trim(); if (!next || next===a.name) return; await renameServerAsset(a.id, next); setAssets(await listServerAssets(currentProject!.id!)) }}>重命名</Button>
-                        <Button size="xs" color="red" variant="subtle" onClick={async ()=>{ if (confirm('删除该资产？')) { await deleteServerAsset(a.id); setAssets(await listServerAssets(currentProject!.id!)) } }}>删除</Button>
+              <Tabs value={tab} onChange={(v) => setTab((v as any) || 'local')}>
+                <Tabs.List>
+                  <Tabs.Tab value="local">项目资产</Tabs.Tab>
+                  <Tabs.Tab value="sora">Sora 草稿</Tabs.Tab>
+                </Tabs.List>
+                <Tabs.Panel value="local" pt="xs">
+                  <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                    {assets.length === 0 && (<Text size="xs" c="dimmed">暂无资产</Text>)}
+                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                      {assets.map(a => (
+                        <Card key={a.id} withBorder radius="md" shadow="sm">
+                          <PlaceholderImage label={a.name} />
+                          <Group justify="space-between" mt="sm">
+                            <Text size="sm">{a.name}</Text>
+                            <Group gap={6}>
+                              <Button size="xs" variant="light" onClick={()=>{ const pos = { x: 200, y: (anchorY||200) }; applyAssetAt(a.id, pos); setActivePanel(null) }}>添加</Button>
+                              <Button size="xs" variant="subtle" onClick={async ()=>{ const next = prompt('重命名：', a.name)?.trim(); if (!next || next===a.name) return; await renameServerAsset(a.id, next); setAssets(await listServerAssets(currentProject!.id!)) }}>重命名</Button>
+                              <Button size="xs" color="red" variant="subtle" onClick={async ()=>{ if (confirm('删除该资产？')) { await deleteServerAsset(a.id); setAssets(await listServerAssets(currentProject!.id!)) } }}>删除</Button>
+                            </Group>
+                          </Group>
+                        </Card>
+                      ))}
+                    </SimpleGrid>
+                  </div>
+                </Tabs.Panel>
+                <Tabs.Panel value="sora" pt="xs">
+                  <Stack gap="sm">
+                    <Group justify="space-between">
+                      <Text size="sm">Sora Token 身份</Text>
+                      <Select
+                        size="xs"
+                        placeholder={soraTokens.length === 0 ? '暂无 Sora 密钥' : '选择 Token'}
+                        data={soraTokens.map((t) => ({ value: t.id, label: t.label }))}
+                        value={selectedTokenId}
+                        onChange={async (value) => {
+                          setSelectedTokenId(value)
+                          if (value) {
+                            try {
+                              const data = await listSoraDrafts(value)
+                              setDrafts(data.items || [])
+                              setDraftCursor(data.cursor || null)
+                            } catch {
+                              setDrafts([])
+                              setDraftCursor(null)
+                            }
+                          } else {
+                            setDrafts([])
+                            setDraftCursor(null)
+                          }
+                        }}
+                      />
                     </Group>
-                  </Group>
-                </Card>
-              ))}
-              </SimpleGrid>
-              </div>
+                    <div style={{ maxHeight: '52vh', overflowY: 'auto' }}>
+                      {drafts.length === 0 && <Text size="xs" c="dimmed">暂无草稿或未选择 Token</Text>}
+                      <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="xs">
+                        {drafts.map((d, idx) => (
+                          <Paper key={d.id ?? idx} withBorder radius="md" p="xs">
+                            {d.thumbnailUrl && (
+                              <Image
+                                src={d.thumbnailUrl}
+                                alt={d.title || d.id || `草稿 ${idx + 1}`}
+                                radius="sm"
+                                mb={4}
+                                height={100}
+                                fit="cover"
+                              />
+                            )}
+                            <Text size="xs" fw={500} lineClamp={1}>
+                              {d.title || `草稿 ${idx + 1}`}
+                            </Text>
+                            {d.prompt && (
+                              <Text size="xs" c="dimmed" lineClamp={2}>
+                                {d.prompt}
+                              </Text>
+                            )}
+                          </Paper>
+                        ))}
+                      </SimpleGrid>
+                      {draftCursor && (
+                        <Group justify="center" mt="sm">
+                          <Button size="xs" variant="light" loading={draftLoading} onClick={loadMoreDrafts}>
+                            加载更多
+                          </Button>
+                        </Group>
+                      )}
+                    </div>
+                  </Stack>
+                </Tabs.Panel>
+              </Tabs>
             </Paper>
           </div>
         )}

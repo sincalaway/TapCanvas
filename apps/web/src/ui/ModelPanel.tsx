@@ -1,7 +1,18 @@
 import React from 'react'
 import { Paper, Title, Text, Button, Group, Stack, Transition, Modal, TextInput, Badge } from '@mantine/core'
 import { useUIStore } from './uiStore'
-import { deleteModelToken, listModelProviders, listModelTokens, upsertModelProvider, upsertModelToken, type ModelProviderDto, type ModelTokenDto } from '../api/server'
+import {
+  deleteModelToken,
+  listModelEndpoints,
+  listModelProviders,
+  listModelTokens,
+  upsertModelEndpoint,
+  upsertModelProvider,
+  upsertModelToken,
+  type ModelProviderDto,
+  type ModelTokenDto,
+  type ModelEndpointDto,
+} from '../api/server'
 
 export default function ModelPanel(): JSX.Element | null {
   const active = useUIStore((s) => s.activePanel)
@@ -16,6 +27,12 @@ export default function ModelPanel(): JSX.Element | null {
   const [label, setLabel] = React.useState('')
   const [secret, setSecret] = React.useState('')
   const [userAgent, setUserAgent] = React.useState('')
+  const [videosEndpoint, setVideosEndpoint] = React.useState<ModelEndpointDto | null>(null)
+  const [videoEndpoint, setVideoEndpoint] = React.useState<ModelEndpointDto | null>(null)
+  const [soraEndpoint, setSoraEndpoint] = React.useState<ModelEndpointDto | null>(null)
+  const [videosUrl, setVideosUrl] = React.useState('')
+  const [videoUrl, setVideoUrl] = React.useState('')
+  const [soraUrl, setSoraUrl] = React.useState('')
 
   React.useEffect(() => {
     if (!mounted) return
@@ -28,6 +45,17 @@ export default function ModelPanel(): JSX.Element | null {
           setProviders((prev) => [...prev, sora!])
         }
         setSoraProvider(sora)
+        const eps = await listModelEndpoints(sora.id)
+        const byKey: Record<string, ModelEndpointDto> = {}
+        eps.forEach((e) => {
+          byKey[e.key] = e
+        })
+        setVideosEndpoint(byKey.videos || null)
+        setVideoEndpoint(byKey.video || null)
+        setSoraEndpoint(byKey.sora || null)
+        setVideosUrl(byKey.videos?.baseUrl || '')
+        setVideoUrl(byKey.video?.baseUrl || '')
+        setSoraUrl(byKey.sora?.baseUrl || '')
         const ts = await listModelTokens(sora.id)
         setTokens(ts)
       })
@@ -46,11 +74,17 @@ export default function ModelPanel(): JSX.Element | null {
 
   const handleSaveToken = async () => {
     if (!soraProvider) return
+    const existingSecret = editingToken?.secretToken ?? ''
+    const finalSecret = secret || existingSecret
+    if (!finalSecret.trim()) {
+      alert('请填写 API Token')
+      return
+    }
     const saved = await upsertModelToken({
       id: editingToken?.id,
       providerId: soraProvider.id,
       label: label || '未命名密钥',
-      secretToken: secret || (editingToken?.secretToken ?? ''),
+      secretToken: finalSecret,
       userAgent: userAgent || null,
     })
     const next = editingToken
@@ -133,6 +167,59 @@ export default function ModelPanel(): JSX.Element | null {
                   <Text size="sm" c="dimmed">
                     你可以为 Sora 添加多个 Token，类似 n8n 的身份配置。它们将共用同一厂商额度。
                   </Text>
+                  <Stack gap="xs">
+                    <TextInput
+                      label="videos 域名（例如长视频 API）"
+                      placeholder="例如：https://videos.sora.example.com"
+                      value={videosUrl}
+                      onChange={(e) => setVideosUrl(e.currentTarget.value)}
+                      onBlur={async () => {
+                        if (!soraProvider || !videosUrl.trim()) return
+                        const saved = await upsertModelEndpoint({
+                          id: videosEndpoint?.id,
+                          providerId: soraProvider.id,
+                          key: 'videos',
+                          label: 'videos 域名',
+                          baseUrl: videosUrl.trim(),
+                        })
+                        setVideosEndpoint(saved)
+                      }}
+                    />
+                    <TextInput
+                      label="video 域名（例如任务接口）"
+                      placeholder="例如：https://video.sora.example.com"
+                      value={videoUrl}
+                      onChange={(e) => setVideoUrl(e.currentTarget.value)}
+                      onBlur={async () => {
+                        if (!soraProvider || !videoUrl.trim()) return
+                        const saved = await upsertModelEndpoint({
+                          id: videoEndpoint?.id,
+                          providerId: soraProvider.id,
+                          key: 'video',
+                          label: 'video 域名',
+                          baseUrl: videoUrl.trim(),
+                        })
+                        setVideoEndpoint(saved)
+                      }}
+                    />
+                    <TextInput
+                      label="sora 域名（通用控制 API）"
+                      placeholder="例如：https://sora.sora.example.com"
+                      value={soraUrl}
+                      onChange={(e) => setSoraUrl(e.currentTarget.value)}
+                      onBlur={async () => {
+                        if (!soraProvider || !soraUrl.trim()) return
+                        const saved = await upsertModelEndpoint({
+                          id: soraEndpoint?.id,
+                          providerId: soraProvider.id,
+                          key: 'sora',
+                          label: 'sora 域名',
+                          baseUrl: soraUrl.trim(),
+                        })
+                        setSoraEndpoint(saved)
+                      }}
+                    />
+                  </Stack>
                   <Group justify="space-between">
                     <Title order={5}>已保存的密钥</Title>
                     <Button size="xs" variant="light" onClick={openModalForNew}>

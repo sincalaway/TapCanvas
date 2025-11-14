@@ -24,40 +24,49 @@ export default function KeyboardShortcuts() {
     function onKey(e: KeyboardEvent) {
       const isMac = navigator.platform.toLowerCase().includes('mac')
       const mod = isMac ? e.metaKey : e.ctrlKey
+      const target = e.target as HTMLElement | null
+      const tagName = target?.tagName
+      const isTextInput =
+        tagName === 'INPUT' ||
+        tagName === 'TEXTAREA' ||
+        !!target?.closest('input') ||
+        !!target?.closest('textarea') ||
+        target?.getAttribute('contenteditable') === 'true' ||
+        !!target?.closest('[contenteditable="true"]')
       // Delete
-      if ((e.key === 'Delete' || e.key === 'Backspace') && !['INPUT','TEXTAREA'].includes((e.target as any)?.tagName)) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !isTextInput) {
         e.preventDefault()
         removeSelected()
       }
-      // Copy
-      if (mod && e.key.toLowerCase() === 'c') {
+      // Copy (skip when focused in an input/textarea/contenteditable)
+      if (mod && e.key.toLowerCase() === 'c' && !isTextInput) {
         e.preventDefault()
         copySelected()
       }
-      // Paste
-      if (mod && e.key.toLowerCase() === 'v') {
+      // Paste (skip when focused in an input/textarea/contenteditable)
+      if (mod && e.key.toLowerCase() === 'v' && !isTextInput) {
         e.preventDefault()
         pasteFromClipboard()
       }
       // Undo / Redo
-      if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+      if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey && !isTextInput) {
         e.preventDefault()
         undo()
       }
-      if ((mod && e.key.toLowerCase() === 'z' && e.shiftKey) || (mod && e.key.toLowerCase() === 'y')) {
+      if (((mod && e.key.toLowerCase() === 'z' && e.shiftKey) || (mod && e.key.toLowerCase() === 'y')) && !isTextInput) {
         e.preventDefault()
         redo()
       }
       // Save
-      if (mod && e.key.toLowerCase() === 's') {
+      if (mod && e.key.toLowerCase() === 's' && !isTextInput) {
         e.preventDefault()
         persistToLocalStorage()
       }
       // Select All / Invert / Clear
-      if (mod && e.key.toLowerCase() === 'a' && !e.shiftKey) {
+      if (mod && e.key.toLowerCase() === 'a' && !e.shiftKey && !isTextInput) {
         e.preventDefault(); selectAll()
       }
-      if (mod && e.key.toLowerCase() === 'a' && e.shiftKey) {
+      if (mod && e.key.toLowerCase() === 'a' && e.shiftKey && !isTextInput) {
         e.preventDefault(); invertSelection()
       }
       if (e.key === 'Escape') {
@@ -66,24 +75,24 @@ export default function KeyboardShortcuts() {
         if (stack.length) exitGroupFocus(); else clearSelection()
       }
       // Group / Ungroup
-      if (mod && e.key.toLowerCase() === 'g' && !e.shiftKey) {
+      if (mod && e.key.toLowerCase() === 'g' && !e.shiftKey && !isTextInput) {
         e.preventDefault(); addGroupForSelection(undefined)
       }
-      if (mod && e.key.toLowerCase() === 'g' && e.shiftKey) {
+      if (mod && e.key.toLowerCase() === 'g' && e.shiftKey && !isTextInput) {
         e.preventDefault();
         const s = useRFStore.getState()
         const g = s.nodes.find((n: any) => n.type === 'groupNode' && n.selected)
         if (g) removeGroupById(g.id)
       }
       // Layout
-      if (!['INPUT','TEXTAREA'].includes((e.target as any)?.tagName)) {
+      if (!isTextInput) {
         if (!e.shiftKey && e.key.toLowerCase() === 'l') { e.preventDefault(); layoutGridSelected() }
         if (e.shiftKey && e.key.toLowerCase() === 'l') { e.preventDefault(); layoutHorizontalSelected() }
       }
       // Rename (F2)
       if (e.key === 'F2') { e.preventDefault(); renameSelectedGroup() }
       // Run (mod+Enter): group if group selected, else node
-      if (mod && e.key === 'Enter') {
+      if (mod && e.key === 'Enter' && !isTextInput) {
         e.preventDefault();
         const s = useRFStore.getState()
         const g = s.nodes.find((n: any) => n.type === 'groupNode' && n.selected)

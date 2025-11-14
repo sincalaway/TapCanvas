@@ -60,4 +60,34 @@ export class ModelService {
       where: { id },
     })
   }
+
+  listEndpoints(providerId: string, userId: string) {
+    return this.prisma.modelEndpoint.findMany({
+      where: {
+        providerId,
+        provider: { ownerId: userId },
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+  }
+
+  upsertEndpoint(
+    input: { id?: string; providerId: string; key: string; label: string; baseUrl: string },
+    userId: string,
+  ) {
+    // Ensure the provider belongs to current user
+    return this.prisma.modelEndpoint.upsert({
+      where: input.id ? { id: input.id } : { providerId_key: { providerId: input.providerId, key: input.key } },
+      update: {
+        label: input.label,
+        baseUrl: input.baseUrl,
+      },
+      create: {
+        providerId: input.providerId,
+        key: input.key,
+        label: input.label,
+        baseUrl: input.baseUrl,
+      },
+    })
+  }
 }

@@ -34,3 +34,8 @@
 ## Canvas Dev Tips
 - Use `ReactFlowProvider` at the app level; hooks like `useReactFlow` require the provider.
 - Canvas fills the viewport; header is transparent with only TapCanvas (left) and GitHub icon (right).
+
+## Multi-user Data Isolation
+- All server-side entities (projects, flows, executions, model providers/tokens, assets) must be scoped by the authenticated user.
+- Never share or read another user's data: every query must filter by `userId`/`ownerId` derived from the JWT (e.g. `req.user.sub`).
+- When adding new models or APIs, always design relations so they attach to `User` and are permission-checked on every read/write.
