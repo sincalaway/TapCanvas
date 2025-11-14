@@ -31,6 +31,7 @@ export class ModelController {
       label: string
       secretToken: string
       enabled?: boolean
+      userAgent?: string | null
     },
   ) {
     return this.service.upsertToken(body)
@@ -41,4 +42,3 @@ export class ModelController {
     return this.service.deleteToken(id)
   }
 }
-

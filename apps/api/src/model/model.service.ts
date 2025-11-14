@@ -30,13 +30,14 @@ export class ModelService {
     })
   }
 
-  upsertToken(input: { id?: string; providerId: string; label: string; secretToken: string; enabled?: boolean }) {
+  upsertToken(input: { id?: string; providerId: string; label: string; secretToken: string; enabled?: boolean; userAgent?: string | null }) {
     if (input.id) {
       return this.prisma.modelToken.update({
         where: { id: input.id },
         data: {
           label: input.label,
           secretToken: input.secretToken,
+          userAgent: input.userAgent ?? null,
           enabled: input.enabled ?? true,
         },
       })
@@ -46,6 +47,7 @@ export class ModelService {
         providerId: input.providerId,
         label: input.label,
         secretToken: input.secretToken,
+        userAgent: input.userAgent ?? null,
         enabled: input.enabled ?? true,
       },
     })
@@ -55,4 +57,3 @@ export class ModelService {
     return this.prisma.modelToken.delete({ where: { id } })
   }
 }
-

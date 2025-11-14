@@ -15,6 +15,7 @@ export default function ModelPanel(): JSX.Element | null {
   const [editingToken, setEditingToken] = React.useState<ModelTokenDto | null>(null)
   const [label, setLabel] = React.useState('')
   const [secret, setSecret] = React.useState('')
+  const [userAgent, setUserAgent] = React.useState('')
 
   React.useEffect(() => {
     if (!mounted) return
@@ -39,6 +40,7 @@ export default function ModelPanel(): JSX.Element | null {
     setEditingToken(null)
     setLabel('')
     setSecret('')
+    setUserAgent('')
     setModalOpen(true)
   }
 
@@ -49,6 +51,7 @@ export default function ModelPanel(): JSX.Element | null {
       providerId: soraProvider.id,
       label: label || '未命名密钥',
       secretToken: secret || (editingToken?.secretToken ?? ''),
+      userAgent: userAgent || null,
     })
     const next = editingToken
       ? tokens.map((t) => (t.id === saved.id ? saved : t))
@@ -64,7 +67,7 @@ export default function ModelPanel(): JSX.Element | null {
   }
 
   return (
-    <div style={{ position: 'fixed', left: 82, top: anchorY ? anchorY - 150 : 140, zIndex: 6001 }} data-ux-panel>
+    <div style={{ position: 'fixed', left: 82, top: anchorY ? anchorY - 150 : 140, zIndex: 7000 }} data-ux-panel>
       <Transition mounted={mounted} transition="pop" duration={140} timingFunction="ease">
         {(styles) => (
           <div style={styles}>
@@ -79,12 +82,14 @@ export default function ModelPanel(): JSX.Element | null {
               <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
                 <Stack gap="sm">
                   <Paper withBorder radius="md" p="sm" style={{ position: 'relative' }}>
-                    <Badge color="blue" size="xs" style={{ position: 'absolute', top: 8, right: 8 }}>
-                      Beta
-                    </Badge>
                     <Group justify="space-between" mb={4}>
                       <div>
-                        <Title order={6}>Sora</Title>
+                        <Group gap={6}>
+                          <Title order={6}>Sora</Title>
+                          <Badge color="blue" size="xs">
+                            Beta
+                          </Badge>
+                        </Group>
                         <Text size="xs" c="dimmed">
                           配置多个 Sora API Token，共享同一厂商额度
                         </Text>
@@ -105,47 +110,64 @@ export default function ModelPanel(): JSX.Element | null {
               onClose={() => setModalOpen(false)}
               fullScreen
               withinPortal
+              zIndex={8000}
               title="Sora 身份配置"
+              styles={{
+                content: {
+                  height: '100vh',
+                  paddingTop: 16,
+                  paddingBottom: 16,
+                },
+                body: {
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%',
+                  overflow: 'hidden',
+                },
+              }}
             >
-              <Stack gap="md">
-                <Text size="sm" c="dimmed">
-                  你可以为 Sora 添加多个 Token，类似 n8n 的身份配置。它们将共用同一厂商额度。
-                </Text>
-                <Group justify="space-between">
-                  <Title order={5}>已保存的密钥</Title>
-                  <Button size="xs" variant="light" onClick={openModalForNew}>
-                    新增密钥
-                  </Button>
-                </Group>
-                {tokens.length === 0 && <Text size="sm">暂无密钥，请先新增一个。</Text>}
-                <Stack gap="xs">
-                  {tokens.map((t) => (
-                    <Group key={t.id} justify="space-between">
-                      <div>
-                        <Text size="sm">{t.label}</Text>
-                        <Text size="xs" c="dimmed">
-                          {t.secretToken ? t.secretToken.slice(0, 4) + '••••' : '已保存的密钥'}
-                        </Text>
-                      </div>
-                      <Group gap="xs">
-                        <Button
-                          size="xs"
-                          variant="subtle"
-                          onClick={() => {
-                            setEditingToken(t)
-                            setLabel(t.label)
-                            setSecret('')
-                            setModalOpen(true)
-                          }}
-                        >
-                          编辑
-                        </Button>
-                        <Button size="xs" variant="light" color="red" onClick={() => handleDeleteToken(t.id)}>
-                          删除
-                        </Button>
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <Stack gap="md" style={{ flex: 1, overflowY: 'auto', paddingBottom: 8 }}>
+                  <Text size="sm" c="dimmed">
+                    你可以为 Sora 添加多个 Token，类似 n8n 的身份配置。它们将共用同一厂商额度。
+                  </Text>
+                  <Group justify="space-between">
+                    <Title order={5}>已保存的密钥</Title>
+                    <Button size="xs" variant="light" onClick={openModalForNew}>
+                      新增密钥
+                    </Button>
+                  </Group>
+                  {tokens.length === 0 && <Text size="sm">暂无密钥，请先新增一个。</Text>}
+                  <Stack gap="xs">
+                    {tokens.map((t) => (
+                      <Group key={t.id} justify="space-between">
+                        <div>
+                          <Text size="sm">{t.label}</Text>
+                          <Text size="xs" c="dimmed">
+                            {t.secretToken ? t.secretToken.slice(0, 4) + '••••' : '已保存的密钥'}
+                          </Text>
+                        </div>
+                        <Group gap="xs">
+                          <Button
+                            size="xs"
+                            variant="subtle"
+                            onClick={() => {
+                              setEditingToken(t)
+                              setLabel(t.label)
+                              setSecret('')
+                              setUserAgent(t.userAgent || '')
+                              setModalOpen(true)
+                            }}
+                          >
+                            编辑
+                          </Button>
+                          <Button size="xs" variant="light" color="red" onClick={() => handleDeleteToken(t.id)}>
+                            删除
+                          </Button>
+                        </Group>
                       </Group>
-                    </Group>
-                  ))}
+                    ))}
+                  </Stack>
                 </Stack>
                 <Paper withBorder radius="md" p="md">
                   <Stack gap="sm">
@@ -157,6 +179,12 @@ export default function ModelPanel(): JSX.Element | null {
                       value={secret}
                       onChange={(e) => setSecret(e.currentTarget.value)}
                     />
+                    <TextInput
+                      label="User-Agent"
+                      placeholder="例如：TapCanvas/1.0 (user@example.com)"
+                      value={userAgent}
+                      onChange={(e) => setUserAgent(e.currentTarget.value)}
+                    />
                     <Group justify="flex-end" mt="sm">
                       <Button variant="default" onClick={() => setModalOpen(false)}>
                         取消
@@ -165,7 +193,7 @@ export default function ModelPanel(): JSX.Element | null {
                     </Group>
                   </Stack>
                 </Paper>
-              </Stack>
+              </div>
             </Modal>
           </div>
         )}
@@ -173,4 +201,3 @@ export default function ModelPanel(): JSX.Element | null {
     </div>
   )
 }
-
