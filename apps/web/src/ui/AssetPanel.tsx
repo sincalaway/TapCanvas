@@ -42,11 +42,12 @@ export default function AssetPanel(): JSX.Element | null {
       <Transition mounted={mounted} transition="pop" duration={140} timingFunction="ease">
         {(styles) => (
           <div style={styles}>
-            <Paper withBorder shadow="md" radius="lg" className="glass" p="md" style={{ width: 640, transformOrigin: 'left center' }} data-ux-panel>
+            <Paper withBorder shadow="md" radius="lg" className="glass" p="md" style={{ width: 640, maxHeight: '70vh', transformOrigin: 'left center' }} data-ux-panel>
               <div className="panel-arrow" />
-              <Group justify="space-between" mb={8}>
+              <Group justify="space-between" mb={8} style={{ position: 'sticky', top: 0, zIndex: 1, background: 'transparent' }}>
                 <Title order={6}>我的资产（项目：{currentProject?.name || '未选择'}）</Title>
               </Group>
+              <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
               {assets.length === 0 && (<Text size="xs" c="dimmed">暂无资产</Text>)}
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
               {assets.map(a => (
@@ -63,6 +64,7 @@ export default function AssetPanel(): JSX.Element | null {
                 </Card>
               ))}
               </SimpleGrid>
+              </div>
             </Paper>
           </div>
         )}

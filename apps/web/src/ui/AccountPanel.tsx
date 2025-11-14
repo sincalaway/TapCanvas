@@ -16,7 +16,7 @@ export default function AccountPanel(): JSX.Element | null {
       <Transition mounted={mounted} transition="pop" duration={140} timingFunction="ease">
         {(styles) => (
           <div style={styles}>
-            <Paper withBorder shadow="md" radius="lg" className="glass" p="md" style={{ width: 300, transformOrigin: 'left center' }} data-ux-panel>
+            <Paper withBorder shadow="md" radius="lg" className="glass" p="md" style={{ width: 300, maxHeight: '60vh', overflowY: 'auto', transformOrigin: 'left center' }} data-ux-panel>
               <div className="panel-arrow" />
               <Group>
                 <Avatar src={user?.avatarUrl} alt={user?.login} radius={999} />

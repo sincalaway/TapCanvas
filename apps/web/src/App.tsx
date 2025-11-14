@@ -92,8 +92,7 @@ export default function App(): JSX.Element {
     // 确保项目存在；若无则直接在此创建
     let proj = useUIStore.getState().currentProject
     if (!proj?.id) {
-      const name = (currentProject?.name || prompt('新建项目名称：') || '').trim()
-      if (!name) { notifications.show({ title: '未填写项目名', message: '请输入项目名称后重试', color: 'yellow' }); return }
+      const name = (currentProject?.name || `未命名项目 ${new Date().toLocaleString()}`).trim()
       try {
         const p = await upsertProject({ name })
         setProjects(prev => [p, ...prev])

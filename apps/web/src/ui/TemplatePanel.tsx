@@ -38,9 +38,9 @@ export default function TemplatePanel(): JSX.Element | null {
       <Transition mounted={mounted} transition="pop" duration={140} timingFunction="ease">
         {(styles) => (
           <div style={styles}>
-            <Paper withBorder shadow="md" radius="lg" className="glass" p="md" style={{ width: 720, transformOrigin: 'left center' }} data-ux-panel>
+            <Paper withBorder shadow="md" radius="lg" className="glass" p="md" style={{ width: 720, maxHeight: '70vh', transformOrigin: 'left center' }} data-ux-panel>
               <div className="panel-arrow" />
-        <Group justify="space-between" mb={8}>
+        <Group justify="space-between" mb={8} style={{ position: 'sticky', top: 0, zIndex: 1, background: 'transparent' }}>
           <Title order={6}>工作流（项目：{currentProject?.name || '全部'}）</Title>
           <Group>
             <Badge color="gray" variant="light">推荐</Badge>
@@ -48,6 +48,7 @@ export default function TemplatePanel(): JSX.Element | null {
             <Badge color="gray" variant="light">创建</Badge>
           </Group>
         </Group>
+        <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
         <Tabs defaultValue="public">
           <Tabs.List>
             <Tabs.Tab value="public">公共工作流</Tabs.Tab>
@@ -84,6 +85,7 @@ export default function TemplatePanel(): JSX.Element | null {
             )}
           </Tabs.Panel>
         </Tabs>
+        </div>
             </Paper>
           </div>
         )}

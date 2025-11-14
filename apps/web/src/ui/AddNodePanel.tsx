@@ -12,13 +12,12 @@ export default function AddNodePanel(): JSX.Element | null {
   const fileRef = useRef<HTMLInputElement|null>(null)
 
   const mounted = active === 'add'
-  if (!mounted) return null
   return (
-    <div style={{ position: 'fixed', left: 82, top: (anchorY ? anchorY - 120 : 64), zIndex: 75 }} data-ux-panel>
+    <div style={{ position: 'fixed', left: 82, top: (anchorY ? anchorY - 120 : 64), zIndex: 6001 }} data-ux-panel>
       <Transition mounted={mounted} transition="pop" duration={140} timingFunction="ease">
         {(styles) => (
           <div style={styles}>
-            <Paper withBorder shadow="md" radius="lg" className="glass" p="md" style={{ width: 320, transformOrigin: 'left center' }} data-ux-panel>
+            <Paper withBorder shadow="md" radius="lg" className="glass" p="md" style={{ width: 320, maxHeight: '60vh', overflowY: 'auto', transformOrigin: 'left center' }} data-ux-panel>
               <div className="panel-arrow" />
         <Title order={6} mb={8}>添加节点</Title>
         <Stack gap={8}>

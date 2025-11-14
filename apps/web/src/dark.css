@@ -100,6 +100,13 @@ button { color: var(--mantine-color-text); }
 *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); }
 *::-webkit-scrollbar-track { background: transparent; }
 
+/* Thinner scrollbars inside floating panels */
+[data-ux-panel] { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.14) transparent; }
+[data-ux-panel] *::-webkit-scrollbar { width: 6px; height: 6px; }
+[data-ux-panel] *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 8px; }
+[data-ux-panel] *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+[data-ux-panel] *::-webkit-scrollbar-track { background: transparent; }
+
 /* 紧凑模式：整体减小控件尺寸与间距 */
 [data-compact="true"] .mantine-Button-root { padding: 4px 8px !important; }
 [data-compact="true"] .mantine-NumberInput-input, 

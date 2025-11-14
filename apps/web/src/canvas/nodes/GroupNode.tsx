@@ -47,7 +47,7 @@ export default function GroupNode({ id, data, selected }: NodeProps<Data>): JSX.
           <Button size="xs" color="blue" onClick={async () => {
             await runFlowDag(2, useRFStore.getState, useRFStore.setState, { only: childIds })
           }}>▶ 一键执行</Button>
-          <Button size="xs" variant="subtle" onClick={() => { persistToLocalStorage(); toast('已保存到本地', 'success') }}>保存</Button>
+          {/* 服务器持久化：本地保存入口移除，避免与项目保存冲突 */}
           <Button size="xs" variant="subtle" onClick={()=> setEditing(true)}>重命名</Button>
           <Button size="xs" variant="subtle" color="red" onClick={() => ungroup(id)}>解组</Button>
           {/* Aggregated status */}
