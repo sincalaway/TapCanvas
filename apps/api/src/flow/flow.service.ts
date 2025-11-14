@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from 'nestjs-prisma'
-import { TemporalService } from '../temporal/temporal.service'
+import { InjectQueue } from '@nestjs/bull'
+import type { Queue } from 'bull'
 
 @Injectable()
 export class FlowService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly temporal: TemporalService,
+    @InjectQueue('flow-execution') private readonly flowQueue: Queue,
   ) {}
 
   list(userId: string, projectId?: string) {
@@ -59,33 +60,17 @@ export class FlowService {
       },
     })
 
-    const client = this.temporal.workflowClient
-
-    const handle = await client.start('flowExecutionWorkflow', {
-      taskQueue: 'flow-task-queue',
-      workflowId: execution.workflowId,
-      args: [
-        {
-          executionId: execution.id,
-          flowId,
-          userId,
-          data: (flow as any).data,
-        },
-      ],
-    })
-
-    await this.prisma.flowExecution.update({
-      where: { id: execution.id },
-      data: {
-        runId: handle.firstExecutionRunId,
-        status: 'RUNNING',
-      },
+    await this.flowQueue.add('run', {
+      executionId: execution.id,
+      flowId,
+      userId,
+      data: (flow as any).data,
     })
 
     return {
       executionId: execution.id,
       workflowId: execution.workflowId,
-      runId: handle.firstExecutionRunId,
+      runId: null,
       flowId,
     }
   }

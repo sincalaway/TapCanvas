@@ -33,6 +33,9 @@
     "prisma": "^6.19.0",
     "@temporalio/client": "^1.10.5",
     "@temporalio/worker": "^1.10.5",
+    "@temporalio/workflow": "^1.10.5",
+    "@nestjs/bull": "^11.0.0",
+    "bull": "^4.16.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },

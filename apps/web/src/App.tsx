@@ -54,10 +54,43 @@ export default function App(): JSX.Element {
     return () => window.removeEventListener('beforeunload', beforeUnload)
   }, [])
 
-  React.useEffect(() => { listProjects().then((ps)=>{
-    setProjects(ps)
-    if (!useUIStore.getState().currentProject && ps.length) setCurrentProject({ id: ps[0].id, name: ps[0].name })
-  }).catch(()=>{}) }, [setCurrentProject])
+  // 初始化时：根据 URL 中的 projectId 选择项目；否则默认第一个项目
+  React.useEffect(() => {
+    listProjects()
+      .then((ps) => {
+        setProjects(ps)
+        const existing = useUIStore.getState().currentProject
+        const url = new URL(window.location.href)
+        const pidFromUrl = url.searchParams.get('projectId')
+        const fromUrl = pidFromUrl ? ps.find((p) => p.id === pidFromUrl) : undefined
+
+        if (fromUrl) {
+          if (!existing || existing.id !== fromUrl.id) {
+            setCurrentProject({ id: fromUrl.id, name: fromUrl.name })
+          }
+        } else if (!existing && ps.length) {
+          const first = ps[0]
+          setCurrentProject({ id: first.id, name: first.name })
+        }
+      })
+      .catch(() => {})
+  }, [setCurrentProject])
+
+  // 当 currentProject 变化时，将 projectId 同步到 URL
+  React.useEffect(() => {
+    const pid = currentProject?.id
+    const url = new URL(window.location.href)
+    const current = url.searchParams.get('projectId')
+    if (pid) {
+      if (current !== pid) {
+        url.searchParams.set('projectId', pid)
+        window.history.replaceState(null, '', url.toString())
+      }
+    } else if (current) {
+      url.searchParams.delete('projectId')
+      window.history.replaceState(null, '', url.toString())
+    }
+  }, [currentProject?.id])
 
   // When switching project, sync flow name to project name and clear current flow id (project即工作流)
   React.useEffect(() => {

@@ -19,6 +19,7 @@ model Flow {
   projectId String?
   project   Project? @relation(fields: [projectId], references: [id])
   versions  FlowVersion[]
+  executions FlowExecution[]
 }
 
 model User {
@@ -31,6 +32,7 @@ model User {
   versions  FlowVersion[]
   projects  Project[]
   assets    Asset[]
+   executions FlowExecution[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
