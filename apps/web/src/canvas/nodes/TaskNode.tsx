@@ -5,6 +5,7 @@ import { useRFStore } from '../store'
 import { useUIStore } from '../../ui/uiStore'
 import { ActionIcon, Group, Paper, Textarea, Select, NumberInput, Button, Text } from '@mantine/core'
 import { IconMaximize, IconDownload, IconArrowsDiagonal2, IconBrush, IconPhotoUp, IconDots, IconAdjustments, IconUpload, IconPlayerPlay, IconTexture, IconVideo, IconArrowRight, IconScissors, IconPhotoEdit } from '@tabler/icons-react'
+import { suggestDraftPrompts } from '../../api/server'
 
 type Data = {
   label: string
@@ -71,6 +72,10 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
   const [showMore, setShowMore] = React.useState(false)
   const moreRef = React.useRef<HTMLDivElement|null>(null)
 
+  const [promptSuggestions, setPromptSuggestions] = React.useState<string[]>([])
+  const [activeSuggestion, setActiveSuggestion] = React.useState(0)
+  const suggestTimeout = React.useRef<number | null>(null)
+
   React.useEffect(() => {
     if (!selected || selectedCount !== 1) setShowMore(false)
   }, [selected, selectedCount])
@@ -85,6 +90,35 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
     window.addEventListener('mousedown', onDown)
     return () => window.removeEventListener('mousedown', onDown)
   }, [showMore])
+
+  React.useEffect(() => {
+    if (suggestTimeout.current) {
+      window.clearTimeout(suggestTimeout.current)
+      suggestTimeout.current = null
+    }
+    const value = prompt.trim()
+    if (!value || value.length < 6) {
+      setPromptSuggestions([])
+      setActiveSuggestion(0)
+      return
+    }
+    suggestTimeout.current = window.setTimeout(async () => {
+      try {
+        const res = await suggestDraftPrompts(value, 'sora')
+        setPromptSuggestions(res.prompts || [])
+        setActiveSuggestion(0)
+      } catch {
+        setPromptSuggestions([])
+        setActiveSuggestion(0)
+      }
+    }, 260)
+    return () => {
+      if (suggestTimeout.current) {
+        window.clearTimeout(suggestTimeout.current)
+        suggestTimeout.current = null
+      }
+    }
+  }, [prompt])
 
   // Define node-specific tools and overflow calculation
   const uniqueDefs = React.useMemo(() => {
@@ -309,7 +343,73 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
       <NodeToolbar isVisible={!!selected && selectedCount === 1} position={Position.Bottom} align="center">
         <Paper withBorder shadow="md" radius="md" className="glass" p="sm" style={{ width: 420, transformOrigin: 'top center' }}>
           <Text size="xs" c="dimmed" mb={6}>详情</Text>
-          <Textarea autosize minRows={2} placeholder="在这里输入提示词..." value={prompt} onChange={(e)=>setPrompt(e.currentTarget.value)} />
+          <div style={{ position: 'relative' }}>
+            <Textarea
+              autosize
+              minRows={2}
+              placeholder="在这里输入提示词..."
+              value={prompt}
+              onChange={(e)=>setPrompt(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (!promptSuggestions.length) return
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault()
+                  setActiveSuggestion((idx) => (idx + 1) % promptSuggestions.length)
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  setActiveSuggestion((idx) => (idx - 1 + promptSuggestions.length) % promptSuggestions.length)
+                } else if (e.key === 'Tab') {
+                  e.preventDefault()
+                  const suggestion = promptSuggestions[activeSuggestion]
+                  if (suggestion) {
+                    setPrompt(suggestion)
+                    setPromptSuggestions([])
+                  }
+                } else if (e.key === 'Escape') {
+                  setPromptSuggestions([])
+                }
+              }}
+            />
+            {promptSuggestions.length > 0 && (
+              <Paper
+                withBorder
+                shadow="sm"
+                radius="md"
+                className="glass"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  top: '100%',
+                  marginTop: 4,
+                  zIndex: 10,
+                  maxHeight: 180,
+                  overflowY: 'auto',
+                }}
+              >
+                {promptSuggestions.map((s, idx) => (
+                  <div
+                    key={`${idx}-${s.slice(0,16)}`}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      setPrompt(s)
+                      setPromptSuggestions([])
+                    }}
+                    onMouseEnter={() => setActiveSuggestion(idx)}
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      background: idx === activeSuggestion ? 'rgba(148,163,184,0.28)' : 'transparent',
+                      color: '#e5e7eb',
+                    }}
+                  >
+                    {s}
+                  </div>
+                ))}
+              </Paper>
+            )}
+          </div>
           <Group grow mt={6}>
             <Select label="比例" data={[{value:'16:9',label:'16:9'},{value:'1:1',label:'1:1'},{value:'9:16',label:'9:16'}]} value={aspect} onChange={(v)=>setAspect(v||'16:9')} />
             <NumberInput label="倍率" min={0.5} max={4} step={0.5} value={scale} onChange={(v)=>setScale(Number(v)||1)} />

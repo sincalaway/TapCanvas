@@ -9,9 +9,10 @@ import { AssetModule } from './asset/asset.module'
 import { QueueModule } from './queue/queue.module'
 import { ModelModule } from './model/model.module'
 import { SoraModule } from './sora/sora.module'
+import { DraftModule } from './draft/draft.module'
 
 @Module({
-  imports: [PrismaModule.forRoot({ isGlobal: true }), QueueModule, AuthModule, ProjectModule, AssetModule, FlowModule, ModelModule, SoraModule],
+  imports: [PrismaModule.forRoot({ isGlobal: true }), QueueModule, AuthModule, ProjectModule, AssetModule, FlowModule, ModelModule, SoraModule, DraftModule],
   controllers: [AppController],
   providers: [AppService],
 })
