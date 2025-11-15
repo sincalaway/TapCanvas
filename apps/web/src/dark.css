@@ -44,7 +44,8 @@ button { color: var(--mantine-color-text); }
 }
 
 .glass {
-  background: rgba(255,255,255,0.06) !important;
+  /* 与控件栏一致的 OKLCH 毛玻璃底色 */
+  background: oklch(21% 0.006 285.885 / 0.92) !important;
   backdrop-filter: blur(8px) !important;
   -webkit-backdrop-filter: blur(8px) !important;
 }
