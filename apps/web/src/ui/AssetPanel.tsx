@@ -1,5 +1,5 @@
 import React from 'react'
-import { Paper, Title, SimpleGrid, Card, Image, Text, Button, Group, Stack, Transition, Tabs, Select } from '@mantine/core'
+import { Paper, Title, SimpleGrid, Card, Image, Text, Button, Group, Stack, Transition, Tabs, Select, ActionIcon, Tooltip } from '@mantine/core'
 import { useRFStore } from '../canvas/store'
 import { useUIStore } from './uiStore'
 import {
@@ -15,6 +15,7 @@ import {
   type ModelProviderDto,
   type ModelTokenDto,
 } from '../api/server'
+import { IconPlayerPlay, IconPlus, IconTrash } from '@tabler/icons-react'
 
 function PlaceholderImage({ label }: { label: string }) {
   const svg = encodeURIComponent(`<?xml version="1.0" encoding="UTF-8"?><svg xmlns='http://www.w3.org/2000/svg' width='480' height='270'><defs><linearGradient id='g' x1='0' x2='1'><stop offset='0%' stop-color='#1f2937'/><stop offset='100%' stop-color='#0b0b0d'/></linearGradient></defs><rect width='100%' height='100%' fill='url(#g)'/><text x='50%' y='50%' fill='#e5e7eb' dominant-baseline='middle' text-anchor='middle' font-size='16' font-family='system-ui'>${label}</text></svg>`) 
@@ -202,28 +203,38 @@ export default function AssetPanel(): JSX.Element | null {
                             <Text size="xs" fw={500} lineClamp={1}>
                               {d.title || `草稿 ${idx + 1}`}
                             </Text>
-                            {d.prompt && (
-                              <Text size="xs" c="dimmed" lineClamp={2}>
-                                {d.prompt}
-                              </Text>
-                            )}
-                            <Group justify="space-between" mt={4}>
-                              <Button
-                                size="xs"
-                                variant="subtle"
-                                onClick={() => {
-                                  if (!d.videoUrl) return
-                                  openPreview({ url: d.videoUrl, kind: 'video', name: d.title || d.id || `草稿 ${idx + 1}` })
-                                }}
-                              >
-                                预览
-                              </Button>
-                              <Group gap={4}>
-                                <Button size="xs" variant="light" onClick={() => addDraftToCanvas(d)}>
-                                  添加到画布
-                                </Button>
-                                <Button
-                                  size="xs"
+                            <div style={{ minHeight: 34, marginTop: 2 }}>
+                              {d.prompt && (
+                                <Text size="xs" c="dimmed" lineClamp={2}>
+                                  {d.prompt}
+                                </Text>
+                              )}
+                            </div>
+                            <Group justify="flex-end" gap={4} mt={4}>
+                              <Tooltip label="预览草稿" withArrow>
+                                <ActionIcon
+                                  size="sm"
+                                  variant="subtle"
+                                  onClick={() => {
+                                    if (!d.videoUrl) return
+                                    openPreview({ url: d.videoUrl, kind: 'video', name: d.title || d.id || `草稿 ${idx + 1}` })
+                                  }}
+                                >
+                                  <IconPlayerPlay size={16} />
+                                </ActionIcon>
+                              </Tooltip>
+                              <Tooltip label="添加到画布" withArrow>
+                                <ActionIcon
+                                  size="sm"
+                                  variant="light"
+                                  onClick={() => addDraftToCanvas(d)}
+                                >
+                                  <IconPlus size={16} />
+                                </ActionIcon>
+                              </Tooltip>
+                              <Tooltip label="删除草稿" withArrow>
+                                <ActionIcon
+                                  size="sm"
                                   variant="subtle"
                                   color="red"
                                   onClick={async () => {
@@ -237,9 +248,9 @@ export default function AssetPanel(): JSX.Element | null {
                                     }
                                   }}
                                 >
-                                  删除
-                                </Button>
-                              </Group>
+                                  <IconTrash size={16} />
+                                </ActionIcon>
+                              </Tooltip>
                             </Group>
                           </Paper>
                         ))}

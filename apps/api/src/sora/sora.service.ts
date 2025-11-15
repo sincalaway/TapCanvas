@@ -65,11 +65,45 @@ export class SoraService {
           thumbnailUrl: thumbnail,
           videoUrl,
           platform: 'sora' as const,
+          raw: item,
         }
       })
 
+      // persist/update a lightweight snapshot for later use
+      await Promise.all(
+        items.map((item) =>
+          this.prisma.externalDraft.upsert({
+            where: {
+              userId_provider_remoteId: {
+                userId,
+                provider: 'sora',
+                remoteId: item.id,
+              },
+            },
+            update: {
+              title: item.title,
+              prompt: item.prompt,
+              thumbnailUrl: item.thumbnailUrl,
+              videoUrl: item.videoUrl,
+              raw: item.raw as any,
+              lastSeenAt: new Date(),
+            },
+            create: {
+              userId,
+              provider: 'sora',
+              remoteId: item.id,
+              title: item.title,
+              prompt: item.prompt,
+              thumbnailUrl: item.thumbnailUrl,
+              videoUrl: item.videoUrl,
+              raw: item.raw as any,
+            },
+          }),
+        ),
+      )
+
       return {
-        items,
+        items: items.map(({ raw, ...rest }) => rest),
         cursor: data?.cursor ?? null,
       }
     } catch (err: any) {
