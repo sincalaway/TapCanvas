@@ -354,9 +354,34 @@ export async function finalizeSoraCharacter(payload: {
   }
 
   if (!r.ok) {
-    const msg =
-      (body && (body.message || body.error)) ||
-      `finalize sora character failed: ${r.status}`
+    let msg: string | undefined
+    // 优先使用上游 Sora 返回的错误信息
+    const upstreamError =
+      body?.upstreamData?.error ||
+      body?.error ||
+      (typeof body?.message === 'object' ? body.message : null)
+
+    if (upstreamError && typeof upstreamError.message === 'string') {
+      msg = upstreamError.message
+    } else if (typeof body?.message === 'string') {
+      msg = body.message
+    } else if (typeof body?.error === 'string') {
+      msg = body.error
+    }
+
+    // 特殊处理 invalid_request_error，提示需要重新走流程
+    if (
+      upstreamError &&
+      upstreamError.type === 'invalid_request_error' &&
+      upstreamError.message === 'Cameo is not pending'
+    ) {
+      msg = '当前视频任务已失效或不在可创建状态，请重新上传并创建角色'
+    }
+
+    if (!msg) {
+      msg = `finalize sora character failed: ${r.status}`
+    }
+
     throw new Error(msg)
   }
 

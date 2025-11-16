@@ -267,8 +267,12 @@ export function VideoTrimModal(props: VideoTrimModalProps): JSX.Element | null {
             justifyContent: 'center',
             borderRadius: 8,
             overflow: 'hidden',
+            position: 'relative',
           }}
-          onClick={togglePlay}
+          onClick={() => {
+            if (loading) return
+            togglePlay()
+          }}
         >
           <video
             ref={videoRef}
@@ -276,6 +280,30 @@ export function VideoTrimModal(props: VideoTrimModalProps): JSX.Element | null {
             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             muted
           />
+          {loading && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(0,0,0,.6)',
+                pointerEvents: 'auto',
+                zIndex: 2,
+              }}
+            >
+              <Group gap="xs">
+                <Loader size="sm" />
+                <Text size="sm" c="dimmed">
+                  正在上传并创建角色
+                  {typeof progressPct === 'number'
+                    ? `（${Math.round(progressPct * 100)}%）`
+                    : '…'}
+                </Text>
+              </Group>
+            </div>
+          )}
         </div>
         <Group gap="xs">
           <ActionIcon variant="light" onClick={togglePlay} title={playing ? '暂停' : '播放'}>
@@ -504,29 +532,6 @@ export function VideoTrimModal(props: VideoTrimModalProps): JSX.Element | null {
           {loading ? <Loader size="sm" /> : <IconArrowRight size={24} />}
         </ActionIcon>
       </div>
-      {loading && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,.35)',
-            pointerEvents: 'none',
-          }}
-        >
-          <Group gap="xs">
-            <Loader size="sm" />
-            <Text size="sm" c="dimmed">
-              正在上传并创建角色
-              {typeof progressPct === 'number'
-                ? `（${Math.round(progressPct * 100)}%）`
-                : '…'}
-            </Text>
-          </Group>
-        </div>
-      )}
     </div>
   )
 }

@@ -544,13 +544,38 @@ export class SoraService {
         const msg =
           (res.data && (res.data.message || res.data.error)) ||
           `Sora finalize character failed with status ${res.status}`
+        // 打印上游返回，方便调试
+        // eslint-disable-next-line no-console
+        console.error('Sora finalizeCharacter upstream error:', {
+          url,
+          status: res.status,
+          data: res.data,
+          body,
+        })
         throw new HttpException(
-          { message: msg, upstreamStatus: res.status },
+          { message: msg, upstreamStatus: res.status, upstreamData: res.data ?? null },
           res.status,
         )
       }
       return res.data
     } catch (err: any) {
+      // 如果上面已经抛出了 HttpException，直接透传
+      if (err instanceof HttpException) {
+        // eslint-disable-next-line no-console
+        console.error('Sora finalizeCharacter HttpException:', err.getResponse())
+        throw err
+      }
+
+      // 其它未知错误，打印完整上下文
+      // eslint-disable-next-line no-console
+      console.error('Sora finalizeCharacter unexpected error:', {
+        message: err?.message,
+        status: err?.response?.status,
+        data: err?.response?.data,
+        url: err?.config?.url,
+        headers: err?.config?.headers,
+      })
+
       const status = err?.response?.status ?? HttpStatus.BAD_GATEWAY
       const message =
         err?.response?.data?.message ||
@@ -558,7 +583,7 @@ export class SoraService {
         err?.message ||
         'Sora finalize character request failed'
       throw new HttpException(
-        { message, upstreamStatus: err?.response?.status ?? null },
+        { message, upstreamStatus: err?.response?.status ?? null, upstreamData: err?.response?.data ?? null },
         status,
       )
     }
