@@ -777,16 +777,10 @@ export class SoraService {
           data: res.data,
           body,
         })
-      this.logger.error('getDraftByTaskId upstream error', {
-        taskId,
-        tokenId,
-        status: res.status,
-        data: res.data,
-      })
-      throw new HttpException(
-        { message: msg, upstreamStatus: res.status, upstreamData: res.data ?? null },
-        res.status,
-      )
+        throw new HttpException(
+          { message: msg, upstreamStatus: res.status, upstreamData: res.data ?? null },
+          res.status,
+        )
       }
       return res.data
     } catch (err: any) {
