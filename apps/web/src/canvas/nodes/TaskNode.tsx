@@ -78,6 +78,9 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
   const [imageExpanded, setImageExpanded] = React.useState(false)
   const [imagePrimaryIndex, setImagePrimaryIndex] = React.useState(0)
   const [imageSelectedIndex, setImageSelectedIndex] = React.useState(0)
+  const videoUrl = (data as any)?.videoUrl as string | undefined
+  const videoThumbnailUrl = (data as any)?.videoThumbnailUrl as string | undefined
+  const videoTitle = (data as any)?.videoTitle as string | undefined
   const [hovered, setHovered] = React.useState<number|null>(null)
   const [showMore, setShowMore] = React.useState(false)
   const moreRef = React.useRef<HTMLDivElement|null>(null)
@@ -516,8 +519,8 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
                   </button>
                 )}
               </div>
-              <input
-                ref={fileRef}
+            <input
+              ref={fileRef}
                 type="file"
                 accept="image/*"
                 hidden
@@ -548,6 +551,61 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
             >
               {upstreamText}
             </div>
+          )}
+        </div>
+      )}
+      {(kind === 'video' || kind === 'composeVideo') && (
+        <div
+          style={{
+            marginTop: 6,
+            width: 296,
+            minHeight: 160,
+            borderRadius: 10,
+            border: '1px solid rgba(148,163,184,0.6)',
+            background: 'rgba(15,23,42,0.85)',
+            padding: 8,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            color: '#e5e7eb',
+          }}
+        >
+          {videoUrl ? (
+            <video
+              src={videoUrl}
+              poster={videoThumbnailUrl || undefined}
+              controls
+              loop
+              muted
+              playsInline
+              style={{
+                borderRadius: 8,
+                width: '100%',
+                height: 160,
+                objectFit: 'cover',
+                backgroundColor: '#0f172a',
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                height: 160,
+                borderRadius: 8,
+                border: '1px dashed rgba(148,163,184,0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'rgba(226,232,240,0.75)',
+                fontSize: 12,
+              }}
+            >
+              等待 Sora 视频生成完成…
+            </div>
+          )}
+          {videoTitle && (
+            <Text size="xs" lineClamp={1} c="dimmed">
+              {videoTitle}
+            </Text>
           )}
         </div>
       )}
@@ -967,17 +1025,32 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
               </div>
             </Paper>
           )}
-          <Group grow mt={6}>
+          <div
+            style={{
+              marginTop: 12,
+              display: 'flex',
+              gap: 6,
+              flexWrap: 'nowrap',
+              overflowX: 'auto',
+              alignItems: 'center',
+              paddingBottom: 2,
+            }}
+          >
             {kind === 'textToImage' && (
               <>
                 <Select
-                  label="文案模型"
+                  placeholder="文案模型"
                   data={[
                     { value: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
                     { value: 'gemini-2.5-pro', label: 'gemini-2.5-pro' },
                   ]}
                   value={modelKey}
                   onChange={(v) => setModelKey(v || 'gemini-2.5-flash')}
+                  sx={{ minWidth: 140 }}
+                  styles={{
+                    label: { display: 'none' },
+                    root: { minWidth: 140 },
+                  }}
                   comboboxProps={{
                     withinPortal: true,
                     styles: {
@@ -989,20 +1062,27 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
                   }}
                 />
                 <NumberInput
-                  label="生成次数"
+                  hideControls
+                  step={1}
                   min={1}
                   max={8}
-                  step={1}
                   value={sampleCount}
                   onChange={(v) => setSampleCount(Number(v) || 1)}
                   onWheel={(e) => e.stopPropagation()}
+                  sx={{ minWidth: 72 }}
+                  styles={{
+                    root: { minWidth: 72 },
+                    input: { textAlign: 'center', fontSize: 12 },
+                  }}
+                  placeholder="生成次数"
+                  aria-label="生成次数"
                 />
               </>
             )}
             {kind === 'image' && (
               <>
                 <Select
-                  label="生图模型"
+                  placeholder="生图模型"
                   data={[
                     { value: 'qwen-image-plus', label: 'qwen-image-plus' },
                   ]}
@@ -1017,9 +1097,14 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
                       },
                     },
                   }}
+                  sx={{ minWidth: 140 }}
+                  styles={{
+                    label: { display: 'none' },
+                    root: { minWidth: 140 },
+                  }}
                 />
                 <Select
-                  label="比例"
+                  placeholder="比例"
                   data={[
                     { value: '16:9', label: '16:9' },
                     { value: '1:1', label: '1:1' },
@@ -1027,25 +1112,35 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
                   ]}
                   value={aspect}
                   onChange={(v) => setAspect(v || '16:9')}
+                  sx={{ minWidth: 100 }}
+                  styles={{
+                    label: { display: 'none' },
+                    root: { minWidth: 100 },
+                  }}
                 />
                 <NumberInput
-                  label="生成次数"
+                  hideControls
+                  step={1}
                   min={1}
                   max={8}
-                  step={1}
                   value={sampleCount}
                   onChange={(v) => setSampleCount(Number(v) || 1)}
                   onWheel={(e) => e.stopPropagation()}
+                  sx={{ minWidth: 72 }}
+                  styles={{
+                    root: { minWidth: 72 },
+                    input: { textAlign: 'center', fontSize: 12 },
+                  }}
+                  placeholder="生成次数"
+                  aria-label="生成次数"
                 />
               </>
             )}
             {kind === 'composeVideo' && (
               <>
                 <Select
-                  label="视频模型"
-                  data={[
-                    { value: 'sora-2', label: 'Sora 2' },
-                  ]}
+                  placeholder="视频模型"
+                  data={[{ value: 'sora-2', label: 'Sora 2' }]}
                   value={videoModel}
                   onChange={(v) => setVideoModel(v || 'sora-2')}
                   comboboxProps={{
@@ -1057,9 +1152,14 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
                       },
                     },
                   }}
+                  sx={{ minWidth: 140 }}
+                  styles={{
+                    label: { display: 'none' },
+                    root: { minWidth: 140 },
+                  }}
                 />
                 <Select
-                  label="时长"
+                  placeholder="时长"
                   data={[
                     { value: '10', label: '10 秒' },
                     { value: '15', label: '15 秒' },
@@ -1075,9 +1175,14 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
                       },
                     },
                   }}
+                  sx={{ minWidth: 100 }}
+                  styles={{
+                    label: { display: 'none' },
+                    root: { minWidth: 100 },
+                  }}
                 />
                 <Select
-                  label="画面比例"
+                  placeholder="画面比例"
                   data={[
                     { value: '16:9', label: '16:9' },
                     { value: '1:1', label: '1:1' },
@@ -1085,19 +1190,31 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
                   ]}
                   value={aspect}
                   onChange={(v) => setAspect(v || '16:9')}
+                  sx={{ minWidth: 100 }}
+                  styles={{
+                    label: { display: 'none' },
+                    root: { minWidth: 100 },
+                  }}
                 />
                 <NumberInput
-                  label="生成次数"
+                  hideControls
+                  step={1}
                   min={1}
                   max={8}
-                  step={1}
                   value={sampleCount}
                   onChange={(v) => setSampleCount(Number(v) || 1)}
                   onWheel={(e) => e.stopPropagation()}
+                  sx={{ minWidth: 72 }}
+                  styles={{
+                    root: { minWidth: 72 },
+                    input: { textAlign: 'center', fontSize: 12 },
+                  }}
+                  placeholder="生成次数"
+                  aria-label="生成次数"
                 />
               </>
             )}
-          </Group>
+          </div>
           <Group justify="flex-end" mt={8}>
             <Button
               size="xs"
