@@ -1156,6 +1156,20 @@ export class SoraService {
 
           const postId = await this.publishVideoPostIfNeeded(token, baseUrl, matched)
 
+          const videoProxyBase = await this.resolveBaseUrl(token, 'videos', 'https://videos.openai.com')
+          const rewrite = (raw: string | null | undefined) => this.rewriteVideoUrl(raw || null, videoProxyBase)
+          const thumbnailUrl = rewrite(thumbnail)
+          const finalVideoUrl = rewrite(videoUrl)
+          if (thumbnailUrl) {
+            matched.thumbnail_url = thumbnailUrl
+            if (enc.thumbnail) enc.thumbnail.path = thumbnailUrl
+          }
+          if (finalVideoUrl) {
+            matched.downloadable_url = finalVideoUrl
+            matched.url = finalVideoUrl
+            if (enc.source) enc.source.path = finalVideoUrl
+          }
+
           return {
             id: matched.id,
             title: matched.title ?? null,
@@ -1387,6 +1401,19 @@ export class SoraService {
     const m = id.match(/file_[^#]+/)
     if (m && m[0]) return m[0]
     return id
+  }
+
+  private rewriteVideoUrl(url: string | null, proxyBase: string): string | null {
+    if (!url) return null
+    try {
+      const parsed = new URL(url)
+      const baseParsed = new URL(proxyBase)
+      parsed.protocol = baseParsed.protocol
+      parsed.host = baseParsed.host
+      return parsed.toString()
+    } catch {
+      return url
+    }
   }
 
   private async registerSharedFailure(tokenId: string) {

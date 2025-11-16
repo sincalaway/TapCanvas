@@ -3,9 +3,59 @@ import type { NodeProps } from 'reactflow'
 import { Handle, Position, NodeToolbar } from 'reactflow'
 import { useRFStore } from '../store'
 import { useUIStore } from '../../ui/uiStore'
-import { ActionIcon, Group, Paper, Textarea, Select, NumberInput, Button, Text, Modal, Stack } from '@mantine/core'
-import { IconMaximize, IconDownload, IconArrowsDiagonal2, IconBrush, IconPhotoUp, IconDots, IconAdjustments, IconUpload, IconPlayerPlay, IconTexture, IconVideo, IconArrowRight, IconScissors, IconPhotoEdit, IconChevronDown, IconChevronUp } from '@tabler/icons-react'
+import { ActionIcon, Group, Paper, Textarea, Menu, Button, Text, Modal, Stack } from '@mantine/core'
+import {
+  IconMaximize,
+  IconDownload,
+  IconArrowsDiagonal2,
+  IconBrush,
+  IconPhotoUp,
+  IconDots,
+  IconAdjustments,
+  IconUpload,
+  IconPlayerPlay,
+  IconTexture,
+  IconVideo,
+  IconArrowRight,
+  IconScissors,
+  IconPhotoEdit,
+  IconDeviceTv,
+  IconClock,
+} from '@tabler/icons-react'
 import { listSoraMentions, markDraftPromptUsed, suggestDraftPrompts } from '../../api/server'
+
+const RESOLUTION_OPTIONS = [
+  { value: '16:9', label: '16:9' },
+  { value: '1:1', label: '1:1' },
+  { value: '9:16', label: '9:16' },
+]
+
+const DURATION_OPTIONS = [
+  { value: '10', label: '10s' },
+  { value: '15', label: '15s' },
+]
+
+const SAMPLE_OPTIONS = [1, 2, 3, 4, 5]
+
+const TEXT_MODELS = [
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+]
+const IMAGE_MODELS = [{ value: 'qwen-image-plus', label: 'Qwen Image Plus' }]
+const VIDEO_MODELS = [{ value: 'sora-2', label: 'Sora 2' }]
+
+const allowedModelsByKind = (kind?: string) => {
+  if (kind === 'textToImage') return TEXT_MODELS
+  if (kind === 'image') return IMAGE_MODELS
+  if (kind === 'composeVideo' || kind === 'video') return VIDEO_MODELS
+  return TEXT_MODELS
+}
+
+const getModelLabel = (kind: string | undefined, key: string) => {
+  const list = allowedModelsByKind(kind)
+  const match = list.find((m) => m.value === key)
+  return match ? match.label : key
+}
 
 type Data = {
   label: string
@@ -107,11 +157,67 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
   const [compareOpen, setCompareOpen] = React.useState(false)
   const [modelKey, setModelKey] = React.useState<string>((data as any)?.geminiModel || 'gemini-2.5-flash')
   const [imageModel, setImageModel] = React.useState<string>((data as any)?.imageModel || 'qwen-image-plus')
-   // 视频模型，目前仅支持 Sora2，占个位便于后续扩展
   const [videoModel, setVideoModel] = React.useState<string>((data as any)?.videoModel || 'sora-2')
   const [videoDuration, setVideoDuration] = React.useState<number>(
     (data as any)?.videoDurationSeconds === 15 ? 15 : 10,
   )
+
+  const activeModelKey =
+    kind === 'textToImage'
+      ? modelKey
+      : kind === 'image'
+        ? imageModel
+        : kind === 'composeVideo' || kind === 'video'
+          ? videoModel
+          : modelKey
+  const modelList = allowedModelsByKind(kind)
+  const showTimeMenu = kind === 'composeVideo' || kind === 'video'
+  const showResolutionMenu = kind === 'composeVideo' || kind === 'video' || kind === 'image'
+  React.useEffect(() => {
+    if (!modelList.some((m) => m.value === activeModelKey) && modelList.length) {
+      const first = modelList[0].value
+      setModelKey(first)
+      setImageModel(first)
+      setVideoModel(first)
+      updateNodeData(id, {
+        geminiModel: first,
+        imageModel: first,
+        videoModel: first,
+      })
+    }
+  }, [activeModelKey, modelList, id])
+  const summaryModelLabel = getModelLabel(kind, activeModelKey)
+  const summaryDuration =
+    kind === 'composeVideo' || kind === 'video'
+      ? `${videoDuration}s`
+      : `${sampleCount}x`
+  const summaryResolution = aspect
+  const summaryExec = `${sampleCount}x`
+  const runNode = () => {
+    const nextPrompt = (prompt || (data as any)?.prompt || '').trim()
+    const patch: any = { prompt: nextPrompt }
+    if (kind === 'image' || kind === 'composeVideo') {
+      patch.aspect = aspect
+    }
+    if (kind === 'textToImage') {
+      patch.geminiModel = modelKey
+      patch.sampleCount = sampleCount
+    }
+    if (kind === 'image') {
+      patch.imageModel = imageModel
+      patch.sampleCount = sampleCount
+    }
+    if (kind === 'composeVideo') {
+      patch.sampleCount = sampleCount
+      patch.videoModel = videoModel
+      patch.videoDurationSeconds = videoDuration
+    }
+    if (kind === 'image') {
+      setPrompt(nextPrompt)
+    }
+    updateNodeData(id, patch)
+    runSelected()
+  }
   const [mentionOpen, setMentionOpen] = React.useState(false)
   const [mentionFilter, setMentionFilter] = React.useState('')
   const [mentionItems, setMentionItems] = React.useState<any[]>([])
@@ -703,6 +809,189 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
             transformOrigin: 'top center',
           }}
         >
+          <div
+            style={{
+              background: '#050b16',
+              borderRadius: 8,
+              padding: '6px 10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 6,
+              marginBottom: 8,
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <Menu withinPortal position="bottom-start" transition="pop-top-left">
+                <Menu.Target>
+                  <button
+                    type="button"
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      borderRadius: 999,
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      padding: '4px 10px',
+                      color: '#e5e7eb',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      minWidth: 150,
+                    }}
+                  >
+                    <IconBrush size={14} />
+                    <span>{summaryModelLabel}</span>
+                    <IconArrowRight size={12} />
+                  </button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  {modelList.map((option) => (
+                    <Menu.Item
+                      key={option.value}
+                      onClick={() => {
+                        setModelKey(option.value)
+                        setImageModel(option.value)
+                        setVideoModel(option.value)
+                        updateNodeData(id, {
+                          geminiModel: option.value,
+                          imageModel: option.value,
+                          videoModel: option.value,
+                        })
+                      }}
+                    >
+                      {option.label}
+                    </Menu.Item>
+                  ))}
+                </Menu.Dropdown>
+              </Menu>
+              {showTimeMenu && (
+                <Menu withinPortal position="bottom-start" transition="pop-top-left">
+                  <Menu.Target>
+                    <button
+                      type="button"
+                      style={{
+                        background: 'rgba(255,255,255,0.04)',
+                        borderRadius: 999,
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        padding: '4px 10px',
+                        color: '#fef3c7',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        minWidth: 100,
+                      }}
+                    >
+                      <IconClock size={14} />
+                      <span>{summaryDuration}</span>
+                      <IconArrowRight size={12} />
+                    </button>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    {DURATION_OPTIONS.map((option) => (
+                      <Menu.Item
+                        key={option.value}
+                        onClick={() => {
+                          const num = Number(option.value)
+                          setVideoDuration(num)
+                          updateNodeData(id, { videoDurationSeconds: num })
+                        }}
+                      >
+                        {option.label}
+                      </Menu.Item>
+                    ))}
+                  </Menu.Dropdown>
+                </Menu>
+              )}
+              {showResolutionMenu && (
+                <Menu withinPortal position="bottom-start" transition="pop-top-left">
+                  <Menu.Target>
+                    <button
+                      type="button"
+                      style={{
+                        background: 'rgba(255,255,255,0.04)',
+                        borderRadius: 999,
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        padding: '4px 10px',
+                        color: '#bfdbfe',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        minWidth: 120,
+                      }}
+                    >
+                      <IconDeviceTv size={14} />
+                      <span>{summaryResolution}</span>
+                      <IconArrowRight size={12} />
+                    </button>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    {RESOLUTION_OPTIONS.map((option) => (
+                      <Menu.Item
+                        key={option.value}
+                        onClick={() => {
+                          setAspect(option.value)
+                          updateNodeData(id, { aspect: option.value })
+                        }}
+                      >
+                        {option.label}
+                      </Menu.Item>
+                    ))}
+                  </Menu.Dropdown>
+                </Menu>
+              )}
+              <Menu withinPortal position="bottom-start" transition="pop-top-left">
+                <Menu.Target>
+                  <button
+                    type="button"
+                    style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      borderRadius: 999,
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      padding: '4px 10px',
+                      color: '#a5f3fc',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      minWidth: 80,
+                    }}
+                  >
+                    <IconAdjustments size={14} />
+                    <span>{summaryExec}</span>
+                    <IconArrowRight size={12} />
+                  </button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  {SAMPLE_OPTIONS.map((value) => (
+                    <Menu.Item
+                      key={value}
+                      onClick={() => {
+                        setSampleCount(value)
+                        updateNodeData(id, { sampleCount: value })
+                      }}
+                    >
+                      {value}x
+                    </Menu.Item>
+                  ))}
+                </Menu.Dropdown>
+              </Menu>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <ActionIcon
+                size="lg"
+                variant="filled"
+                color="blue"
+                title="执行节点"
+                loading={status === 'running' || status === 'queued'}
+                onClick={runNode}
+              >
+                <IconPlayerPlay size={16} />
+              </ActionIcon>
+            </div>
+          </div>
           <Text size="xs" c="dimmed" mb={6}>{kind === 'textToImage' ? '文本提示词' : kind === 'composeVideo' ? '视频提示词与素材' : '详情'}</Text>
           {kind === 'composeVideo' && (upstreamImageUrl || upstreamText) && (
             <div style={{ marginBottom: 8 }}>
@@ -1027,233 +1316,6 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
               </div>
             </Paper>
           )}
-          <div
-            style={{
-              marginTop: 12,
-              display: 'flex',
-              gap: 6,
-              flexWrap: 'nowrap',
-              overflowX: 'auto',
-              alignItems: 'center',
-              paddingBottom: 2,
-            }}
-          >
-            {kind === 'textToImage' && (
-              <>
-                <Select
-                  placeholder="文案模型"
-                  data={[
-                    { value: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
-                    { value: 'gemini-2.5-pro', label: 'gemini-2.5-pro' },
-                  ]}
-                  value={modelKey}
-                  onChange={(v) => setModelKey(v || 'gemini-2.5-flash')}
-                  sx={{ minWidth: 140 }}
-                  styles={{
-                    label: { display: 'none' },
-                    root: { minWidth: 140 },
-                  }}
-                  comboboxProps={{
-                    withinPortal: true,
-                    styles: {
-                      dropdown: {
-                        minWidth: 260,
-                        whiteSpace: 'nowrap',
-                      },
-                    },
-                  }}
-                />
-                <NumberInput
-                  hideControls
-                  step={1}
-                  min={1}
-                  max={8}
-                  value={sampleCount}
-                  onChange={(v) => setSampleCount(Number(v) || 1)}
-                  onWheel={(e) => e.stopPropagation()}
-                  sx={{ minWidth: 72 }}
-                  styles={{
-                    root: { minWidth: 72 },
-                    input: { textAlign: 'center', fontSize: 12 },
-                  }}
-                  placeholder="生成次数"
-                  aria-label="生成次数"
-                />
-              </>
-            )}
-            {kind === 'image' && (
-              <>
-                <Select
-                  placeholder="生图模型"
-                  data={[
-                    { value: 'qwen-image-plus', label: 'qwen-image-plus' },
-                  ]}
-                  value={imageModel}
-                  onChange={(v) => setImageModel(v || 'qwen-image-plus')}
-                  comboboxProps={{
-                    withinPortal: true,
-                    styles: {
-                      dropdown: {
-                        minWidth: 260,
-                        whiteSpace: 'nowrap',
-                      },
-                    },
-                  }}
-                  sx={{ minWidth: 140 }}
-                  styles={{
-                    label: { display: 'none' },
-                    root: { minWidth: 140 },
-                  }}
-                />
-                <Select
-                  placeholder="比例"
-                  data={[
-                    { value: '16:9', label: '16:9' },
-                    { value: '1:1', label: '1:1' },
-                    { value: '9:16', label: '9:16' },
-                  ]}
-                  value={aspect}
-                  onChange={(v) => setAspect(v || '16:9')}
-                  sx={{ minWidth: 100 }}
-                  styles={{
-                    label: { display: 'none' },
-                    root: { minWidth: 100 },
-                  }}
-                />
-                <NumberInput
-                  hideControls
-                  step={1}
-                  min={1}
-                  max={8}
-                  value={sampleCount}
-                  onChange={(v) => setSampleCount(Number(v) || 1)}
-                  onWheel={(e) => e.stopPropagation()}
-                  sx={{ minWidth: 72 }}
-                  styles={{
-                    root: { minWidth: 72 },
-                    input: { textAlign: 'center', fontSize: 12 },
-                  }}
-                  placeholder="生成次数"
-                  aria-label="生成次数"
-                />
-              </>
-            )}
-            {kind === 'composeVideo' && (
-              <>
-                <Select
-                  placeholder="视频模型"
-                  data={[{ value: 'sora-2', label: 'Sora 2' }]}
-                  value={videoModel}
-                  onChange={(v) => setVideoModel(v || 'sora-2')}
-                  comboboxProps={{
-                    withinPortal: true,
-                    styles: {
-                      dropdown: {
-                        minWidth: 260,
-                        whiteSpace: 'nowrap',
-                      },
-                    },
-                  }}
-                  sx={{ minWidth: 140 }}
-                  styles={{
-                    label: { display: 'none' },
-                    root: { minWidth: 140 },
-                  }}
-                />
-                <Select
-                  placeholder="时长"
-                  data={[
-                    { value: '10', label: '10 秒' },
-                    { value: '15', label: '15 秒' },
-                  ]}
-                  value={String(videoDuration)}
-                  onChange={(v) => setVideoDuration(v ? Number(v) : 10)}
-                  comboboxProps={{
-                    withinPortal: true,
-                    styles: {
-                      dropdown: {
-                        minWidth: 160,
-                        whiteSpace: 'nowrap',
-                      },
-                    },
-                  }}
-                  sx={{ minWidth: 100 }}
-                  styles={{
-                    label: { display: 'none' },
-                    root: { minWidth: 100 },
-                  }}
-                />
-                <Select
-                  placeholder="画面比例"
-                  data={[
-                    { value: '16:9', label: '16:9' },
-                    { value: '1:1', label: '1:1' },
-                    { value: '9:16', label: '9:16' },
-                  ]}
-                  value={aspect}
-                  onChange={(v) => setAspect(v || '16:9')}
-                  sx={{ minWidth: 100 }}
-                  styles={{
-                    label: { display: 'none' },
-                    root: { minWidth: 100 },
-                  }}
-                />
-                <NumberInput
-                  hideControls
-                  step={1}
-                  min={1}
-                  max={8}
-                  value={sampleCount}
-                  onChange={(v) => setSampleCount(Number(v) || 1)}
-                  onWheel={(e) => e.stopPropagation()}
-                  sx={{ minWidth: 72 }}
-                  styles={{
-                    root: { minWidth: 72 },
-                    input: { textAlign: 'center', fontSize: 12 },
-                  }}
-                  placeholder="生成次数"
-                  aria-label="生成次数"
-                />
-              </>
-            )}
-          </div>
-          <Group justify="flex-end" mt={8}>
-            <Button
-              size="xs"
-              loading={status === 'running' || status === 'queued'}
-              onClick={() => {
-                const nextPrompt = (prompt || (data as any)?.prompt || '').trim()
-
-                const patch: any = { prompt: nextPrompt }
-                if (kind === 'image' || kind === 'composeVideo') {
-                  patch.aspect = aspect
-                }
-                if (kind === 'textToImage') {
-                  patch.geminiModel = modelKey
-                  patch.sampleCount = sampleCount
-                }
-                if (kind === 'image') {
-                  patch.imageModel = imageModel
-                  patch.sampleCount = sampleCount
-                }
-                if (kind === 'composeVideo') {
-                  patch.sampleCount = sampleCount
-                  patch.videoModel = videoModel
-                  patch.videoDurationSeconds = videoDuration
-                }
-
-                // 同步本地状态，便于预览区展示最新提示词
-                if (kind === 'image') {
-                  setPrompt(nextPrompt)
-                }
-
-                updateNodeData(id, patch)
-                runSelected()
-              }}
-            >
-              {kind === 'textToImage' ? 'AI 优化文案' : '一键执行'}
-            </Button>
-          </Group>
         </Paper>
       </NodeToolbar>
 

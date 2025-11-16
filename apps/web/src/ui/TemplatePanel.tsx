@@ -4,11 +4,11 @@ import { useUIStore } from './uiStore'
 import { listServerFlows, listProjectFlows, type FlowDto } from '../api/server'
 import { useRFStore } from '../canvas/store'
 
-const publicTemplates = [
-  { title: 'UGC Creator' },
-  { title: '多角度分镜' },
-  { title: 'AI发型实验室' },
-  { title: '超级换脸' },
+const publicTemplates:[] = [
+  // { title: 'UGC Creator' },
+  // { title: '多角度分镜' },
+  // { title: 'AI发型实验室' },
+  // { title: '超级换脸' },
 ]
 
 function PlaceholderImage({ label }: { label: string }) {

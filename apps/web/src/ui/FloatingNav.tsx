@@ -39,9 +39,9 @@ export default function FloatingNav(): JSX.Element {
           <Item label="我的资产" icon={<IconListDetails size={18} />} onHover={(y) => { setPanelAnchorY(y); setActivePanel('assets') }} />
           <Item label="模型配置" icon={<IconSettings size={18} />} onHover={(y) => { setPanelAnchorY(y); setActivePanel('models') }} />
           <Item label="历史记录" icon={<IconHistory size={18} />} onHover={(y) => { setPanelAnchorY(y); setActivePanel('history') }} />
-          <Item label="图片编辑" icon={<IconPhotoEdit size={18} />} onHover={() => { /* no panel yet */ }} badge="Beta" />
-          <Item label="标尺" icon={<IconRuler size={18} />} onHover={() => { /* no panel yet */ }} />
-          <Item label="帮助" icon={<IconHelpCircle size={18} />} onHover={() => { /* no panel yet */ }} />
+          {/* <Item label="图片编辑" icon={<IconPhotoEdit size={18} />}  badge="Beta" /> */}
+          {/* <Item label="标尺" icon={<IconRuler size={18} />}  /> */}
+          {/* <Item label="帮助" icon={<IconHelpCircle size={18} />}  /> */}
           <div style={{ height: 8 }} />
           {(() => {
             const user = useAuth.getState().user
