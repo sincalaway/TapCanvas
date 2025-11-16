@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { JwtGuard } from '../auth/jwt.guard'
 import { SoraService } from './sora.service'
 
@@ -36,5 +36,39 @@ export class SoraController {
   ) {
     const parsedLimit = limit ? parseInt(limit, 10) || undefined : undefined
     return this.service.getCharacters(String(req.user.sub), tokenId, cursor, parsedLimit)
+  }
+
+  @Get('characters/delete')
+  deleteCharacter(
+    @Query('tokenId') tokenId: string,
+    @Query('characterId') characterId: string,
+    @Req() req: any,
+  ) {
+    return this.service.deleteCharacter(String(req.user.sub), tokenId, characterId)
+  }
+
+  @Post('characters/check-username')
+  checkCharacterUsername(
+    @Body() body: { tokenId?: string; username: string },
+    @Req() req: any,
+  ) {
+    const { tokenId, username } = body
+    return this.service.checkCharacterUsername(String(req.user.sub), tokenId, username)
+  }
+
+  @Post('characters/update')
+  updateCharacter(
+    @Body()
+    body: {
+      tokenId: string
+      characterId: string
+      username?: string
+      display_name?: string | null
+      profile_asset_pointer?: any
+    },
+    @Req() req: any,
+  ) {
+    const { tokenId, characterId, ...rest } = body
+    return this.service.updateCharacter(String(req.user.sub), tokenId, characterId, rest)
   }
 }

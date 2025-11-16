@@ -1,5 +1,5 @@
 import React from 'react'
-import { Paper, Title, SimpleGrid, Card, Image, Text, Button, Group, Stack, Transition, Tabs, Select, ActionIcon, Tooltip, Loader, Center } from '@mantine/core'
+import { Paper, Title, SimpleGrid, Card, Image, Text, Button, Group, Stack, Transition, Tabs, Select, ActionIcon, Tooltip, Loader, Center, Modal, TextInput } from '@mantine/core'
 import { useRFStore } from '../canvas/store'
 import { useUIStore } from './uiStore'
 import {
@@ -13,11 +13,14 @@ import {
   deleteSoraDraft,
   markDraftPromptUsed,
   listSoraCharacters,
+  deleteSoraCharacter,
+  checkSoraCharacterUsername,
+  updateSoraCharacter,
   type ServerAssetDto,
   type ModelProviderDto,
   type ModelTokenDto,
 } from '../api/server'
-import { IconPlayerPlay, IconPlus, IconTrash } from '@tabler/icons-react'
+import { IconPlayerPlay, IconPlus, IconTrash, IconPencil } from '@tabler/icons-react'
 
 function PlaceholderImage({ label }: { label: string }) {
   const svg = encodeURIComponent(`<?xml version="1.0" encoding="UTF-8"?><svg xmlns='http://www.w3.org/2000/svg' width='480' height='270'><defs><linearGradient id='g' x1='0' x2='1'><stop offset='0%' stop-color='#1f2937'/><stop offset='100%' stop-color='#0b0b0d'/></linearGradient></defs><rect width='100%' height='100%' fill='url(#g)'/><text x='50%' y='50%' fill='#e5e7eb' dominant-baseline='middle' text-anchor='middle' font-size='16' font-family='system-ui'>${label}</text></svg>`) 
@@ -46,6 +49,12 @@ export default function AssetPanel(): JSX.Element | null {
   const [charCursor, setCharCursor] = React.useState<string | null>(null)
   const [charLoading, setCharLoading] = React.useState(false)
   const [soraCharUsingShared, setSoraCharUsingShared] = React.useState(false)
+  const [renameCharOpen, setRenameCharOpen] = React.useState(false)
+  const [renameCharTarget, setRenameCharTarget] = React.useState<any | null>(null)
+  const [renameCharName, setRenameCharName] = React.useState('')
+  const [renameCharError, setRenameCharError] = React.useState<string | null>(null)
+  const [renameCharChecking, setRenameCharChecking] = React.useState(false)
+  const renameDebounceRef = React.useRef<number | null>(null)
   React.useEffect(() => {
     const loader = currentProject?.id ? listServerAssets(currentProject.id) : Promise.resolve([])
     loader.then(setAssets).catch(() => setAssets([]))
@@ -53,7 +62,8 @@ export default function AssetPanel(): JSX.Element | null {
 
   React.useEffect(() => {
     if (!mounted || (tab !== 'sora' && tab !== 'sora-characters')) return
-    setDraftLoading(true)
+    if (tab === 'sora') setDraftLoading(true)
+    if (tab === 'sora-characters') setCharLoading(true)
     listModelProviders()
       .then((ps) => {
         const soras = ps.filter((p) => p.vendor === 'sora')
@@ -137,8 +147,8 @@ export default function AssetPanel(): JSX.Element | null {
         setCharCursor(null)
       })
       .finally(() => {
-        setDraftLoading(false)
-        setCharLoading(false)
+        if (tab === 'sora') setDraftLoading(false)
+        if (tab === 'sora-characters') setCharLoading(false)
       })
   }, [mounted, tab, selectedTokenId])
 
@@ -429,31 +439,86 @@ export default function AssetPanel(): JSX.Element | null {
                         <Text size="xs" c="dimmed">暂无角色或未选择 Token</Text>
                       )}
                       <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="xs">
-                        {characters.map((c, idx) => (
-                          <Paper key={c.id ?? idx} withBorder radius="md" p="xs">
-                            {c.avatarUrl && (
-                              <Image
-                                src={c.avatarUrl}
-                                alt={c.name || c.id || `角色 ${idx + 1}`}
-                                radius="sm"
-                                mb={4}
-                                height={100}
-                                fit="cover"
-                              />
-                            )}
-                            <Text size="xs" fw={500} lineClamp={1}>
-                              {c.name || `角色 ${idx + 1}`}
-                            </Text>
-                            <div style={{ minHeight: 34, marginTop: 2 }}>
-                              {c.description && (
-                                <Text size="xs" c="dimmed" lineClamp={2}>
-                                  {c.description}
-                                </Text>
+                        {characters.map((c, idx) => {
+                          const avatar =
+                            c.profile_picture_url ||
+                            c.owner_profile?.profile_picture_url ||
+                            null
+                          const name =
+                            c.display_name ||
+                            c.username ||
+                            c.owner_profile?.display_name ||
+                            c.owner_profile?.username ||
+                            `角色 ${idx + 1}`
+                          const desc =
+                            c.description ||
+                            c.owner_profile?.description ||
+                            null
+                          const charId = c.user_id as string | undefined
+                          return (
+                            <Paper key={charId ?? name ?? idx} withBorder radius="md" p="xs">
+                              {avatar && (
+                                <Image
+                                  src={avatar}
+                                  alt={name}
+                                  radius="sm"
+                                  mb={4}
+                                  height={100}
+                                  fit="cover"
+                                />
                               )}
-                            </div>
-                            {/* 暂时不自动添加到画布，仅展示角色信息；后续可扩展为拉起对应的 Sora 节点 */}
-                          </Paper>
-                        ))}
+                              <Text size="xs" fw={500} lineClamp={1}>
+                                {name}
+                              </Text>
+                              <div style={{ minHeight: 34, marginTop: 2 }}>
+                                {desc && (
+                                  <Text size="xs" c="dimmed" lineClamp={2}>
+                                    {desc}
+                                  </Text>
+                                )}
+                              </div>
+                              <Group justify="flex-end" gap={4} mt={4} wrap="nowrap">
+                                <Tooltip label="重命名" withArrow>
+                                  <ActionIcon
+                                    size="sm"
+                                    variant="subtle"
+                                    disabled={!selectedTokenId || !charId}
+                                    onClick={() => {
+                                      if (!selectedTokenId || !charId) return
+                                      setRenameCharTarget(c)
+                                      setRenameCharName(c.username || name || '')
+                                      setRenameCharError(null)
+                                      setRenameCharChecking(false)
+                                      setRenameCharOpen(true)
+                                    }}
+                                  >
+                                    <IconPencil size={14} />
+                                  </ActionIcon>
+                                </Tooltip>
+                                <Tooltip label="删除" withArrow>
+                                  <ActionIcon
+                                    size="sm"
+                                    variant="subtle"
+                                    color="red"
+                                    disabled={!selectedTokenId || !charId}
+                                    onClick={async () => {
+                                      if (!selectedTokenId || !charId) return
+                                      if (!confirm('确定删除该 Sora 角色吗？此操作不可恢复')) return
+                                      try {
+                                        await deleteSoraCharacter(selectedTokenId, charId)
+                                        setCharacters((prev) => prev.filter((x) => x.user_id !== charId))
+                                      } catch (err: any) {
+                                        alert(err?.message || '删除角色失败，请稍后重试')
+                                      }
+                                    }}
+                                  >
+                                    <IconTrash size={14} />
+                                  </ActionIcon>
+                                </Tooltip>
+                              </Group>
+                            </Paper>
+                          )
+                        })}
                       </SimpleGrid>
                       {charCursor && (
                         <Group justify="center" mt="sm">
@@ -467,6 +532,116 @@ export default function AssetPanel(): JSX.Element | null {
                 </Tabs.Panel>
               </Tabs>
             </Paper>
+            <Modal
+              opened={renameCharOpen}
+              onClose={() => {
+                setRenameCharOpen(false)
+                setRenameCharTarget(null)
+                setRenameCharName('')
+                setRenameCharError(null)
+                setRenameCharChecking(false)
+              }}
+              title="重命名 Sora 角色"
+              centered
+            >
+              <Stack gap="sm">
+                <Text size="xs" c="dimmed">
+                  修改角色用户名（用于 Sora 角色卡链接）。输入过程中会自动校验是否合法。
+                </Text>
+                <TextInput
+                  label="用户名"
+                  placeholder="例如：my.character.name"
+                  value={renameCharName}
+                  error={renameCharError || undefined}
+                  onChange={async (e) => {
+                    const v = e.currentTarget.value.trim()
+                    setRenameCharName(v)
+                    setRenameCharError(null)
+                    if (!selectedTokenId || !renameCharTarget?.user_id) return
+                    if (!v || v === renameCharTarget.username) {
+                      setRenameCharChecking(false)
+                      return
+                    }
+                    if (renameDebounceRef.current) {
+                      window.clearTimeout(renameDebounceRef.current)
+                      renameDebounceRef.current = null
+                    }
+                    setRenameCharChecking(true)
+                    renameDebounceRef.current = window.setTimeout(async () => {
+                      try {
+                        await checkSoraCharacterUsername(selectedTokenId, v)
+                        setRenameCharError(null)
+                      } catch (err: any) {
+                        setRenameCharError(err?.message || '用户名不合法或已被占用')
+                      } finally {
+                        setRenameCharChecking(false)
+                      }
+                    }, 500)
+                  }}
+                />
+                <Group justify="flex-end" mt="sm">
+                  <Button
+                    variant="default"
+                    onClick={() => {
+                      setRenameCharOpen(false)
+                      setRenameCharTarget(null)
+                      setRenameCharName('')
+                      setRenameCharError(null)
+                      setRenameCharChecking(false)
+                    }}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    disabled={
+                      !selectedTokenId ||
+                      !renameCharTarget?.user_id ||
+                      !renameCharName ||
+                      renameCharName === renameCharTarget.username ||
+                      !!renameCharError ||
+                      renameCharChecking
+                    }
+                    onClick={async () => {
+                      if (
+                        !selectedTokenId ||
+                        !renameCharTarget?.user_id ||
+                        !renameCharName ||
+                        renameCharName === renameCharTarget.username ||
+                        renameCharChecking ||
+                        renameCharError
+                      ) {
+                        return
+                      }
+                      try {
+                        await updateSoraCharacter({
+                          tokenId: selectedTokenId,
+                          characterId: renameCharTarget.user_id,
+                          username: renameCharName,
+                          display_name: renameCharTarget.display_name ?? null,
+                          profile_asset_pointer: null,
+                        })
+                        setCharacters((prev) =>
+                          prev.map((x) =>
+                            x.user_id === renameCharTarget.user_id
+                              ? { ...x, username: renameCharName }
+                              : x,
+                          ),
+                        )
+                        setRenameCharOpen(false)
+                        setRenameCharTarget(null)
+                        setRenameCharName('')
+                        setRenameCharError(null)
+                        setRenameCharChecking(false)
+                      } catch (err: any) {
+                        alert(err?.message || '更新角色失败，请稍后重试')
+                      }
+                    }}
+                  >
+                    保存
+                  </Button>
+                </Group>
+              </Stack>
+            </Modal>
           </div>
         )}
       </Transition>

@@ -173,7 +173,7 @@ export class SoraService {
   }
 
   async getCharacters(userId: string, tokenId?: string, cursor?: string, limit?: number) {
-    const token = await this.resolveSoraToken(userId, tokenId)
+    const token: any = await this.resolveSoraToken(userId, tokenId)
     if (!token || token.provider.vendor !== 'sora') {
       throw new Error('token not found or not a Sora token')
     }
@@ -182,29 +182,56 @@ export class SoraService {
     const userAgent = token.userAgent || 'TapCanvas/1.0'
 
     try {
-      // 先调用 /api/auth/session 获取当前登录用户的 profile id（如 user-xxxx）
-      const sessionUrl = new URL('/api/auth/session', baseUrl).toString()
-      const sessionRes = await axios.get(sessionUrl, {
-        headers: {
-          Authorization: `Bearer ${token.secretToken}`,
-          'User-Agent': userAgent,
-          Accept: 'application/json',
-        },
-        validateStatus: () => true,
-      })
-      
-      if (sessionRes.status < 200 || sessionRes.status >= 300) {
-        const msg =
-          (sessionRes.data && (sessionRes.data.message || sessionRes.data.error)) ||
-          `Sora session request failed with status ${sessionRes.status}`
-        throw new Error(msg)
+      // 优先从 Sora Token (JWT) 中解析 profile user id
+      let profileId: string | undefined
+      const rawToken = token.secretToken as string | undefined
+      if (rawToken) {
+        const parts = rawToken.split('.')
+        if (parts.length >= 2) {
+          try {
+            const pad = (s: string) => s.padEnd(s.length + ((4 - (s.length % 4)) % 4), '=')
+            const payloadJson = Buffer.from(
+              pad(parts[1]).replace(/-/g, '+').replace(/_/g, '/'),
+              'base64',
+            ).toString('utf8')
+            const payload = JSON.parse(payloadJson)
+            const auth = payload['https://api.openai.com/auth'] || {}
+            const uid = auth.user_id || payload.user_id || undefined
+            if (typeof uid === 'string' && uid.startsWith('user-')) {
+              profileId = uid
+            }
+          } catch {
+            // ignore decode errors, fall back to session call
+          }
+        }
       }
-      const sess = sessionRes.data as any
-      const profileId: string | undefined =
-        sess?.user?.user_id ||
-        sess?.user?.id ||
-        sess?.user_id ||
-        undefined
+
+      // 若无法从 Token 中解析，则退回调用 /api/auth/session
+      if (!profileId) {
+        const sessionUrl = new URL('/api/auth/session', baseUrl).toString()
+        const sessionRes = await axios.get(sessionUrl, {
+          headers: {
+            Authorization: `Bearer ${token.secretToken}`,
+            'User-Agent': userAgent,
+            Accept: 'application/json',
+          },
+          validateStatus: () => true,
+        })
+
+        if (sessionRes.status < 200 || sessionRes.status >= 300) {
+          const msg =
+            (sessionRes.data && (sessionRes.data.message || sessionRes.data.error)) ||
+            `Sora session request failed with status ${sessionRes.status}`
+          throw new Error(msg)
+        }
+        const sess = sessionRes.data as any
+        profileId =
+          sess?.user?.user_id ||
+          sess?.user?.id ||
+          sess?.user_id ||
+          undefined
+      }
+
       if (!profileId) {
         throw new Error('Sora session missing profile user id')
       }
@@ -226,29 +253,7 @@ export class SoraService {
       })
 
       const data = res.data as any
-      const rawItems: any[] = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : []
-
-      const items = rawItems.map((item) => {
-        const avatar =
-          item.avatar_url ||
-          item.preview_image_url ||
-          item.thumbnail_url ||
-          (item.poster_image && item.poster_image.url) ||
-          null
-        const prompt =
-          item.system_prompt ||
-          item.character_prompt ||
-          item.prompt ||
-          null
-        return {
-          id: item.id,
-          name: item.name ?? item.display_name ?? item.title ?? null,
-          description: item.description ?? item.short_description ?? null,
-          avatarUrl: avatar,
-          prompt,
-          platform: 'sora' as const,
-        }
-      })
+      const items: any[] = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : []
 
       return {
         items,
@@ -307,6 +312,146 @@ export class SoraService {
         err?.response?.data?.message ||
         err?.response?.statusText ||
         'Sora delete draft request failed'
+      throw new HttpException(
+        { message, upstreamStatus: err?.response?.status ?? null },
+        status,
+      )
+    }
+  }
+
+  async deleteCharacter(userId: string, tokenId: string, characterId: string) {
+    const token = await this.resolveSoraToken(userId, tokenId)
+    if (!token || token.provider.vendor !== 'sora') {
+      throw new Error('token not found or not a Sora token')
+    }
+
+    const baseUrl = await this.resolveBaseUrl(token, 'sora', 'https://sora.chatgpt.com')
+    const url = new URL(`/backend/project_y/characters/${characterId}`, baseUrl).toString()
+    const userAgent = token.userAgent || 'TapCanvas/1.0'
+
+    try {
+      const res = await axios.delete(url, {
+        headers: {
+          Authorization: `Bearer ${token.secretToken}`,
+          'User-Agent': userAgent,
+          Accept: '*/*',
+        },
+      })
+      return { ok: true, status: res.status }
+    } catch (err: any) {
+      if (token.shared) {
+        await this.registerSharedFailure(token.id)
+      }
+      const status = err?.response?.status ?? HttpStatus.BAD_GATEWAY
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.statusText ||
+        'Sora delete character request failed'
+      throw new HttpException(
+        { message, upstreamStatus: err?.response?.status ?? null },
+        status,
+      )
+    }
+  }
+
+  async checkCharacterUsername(userId: string, tokenId: string | undefined, username: string) {
+    const token = await this.resolveSoraToken(userId, tokenId)
+    if (!token || token.provider.vendor !== 'sora') {
+      throw new Error('token not found or not a Sora token')
+    }
+
+    const baseUrl = await this.resolveBaseUrl(token, 'sora', 'https://sora.chatgpt.com')
+    const url = new URL('/backend/project_y/profile/username/check', baseUrl).toString()
+    const userAgent = token.userAgent || 'TapCanvas/1.0'
+
+    try {
+      const res = await axios.post(
+        url,
+        { username },
+        {
+          headers: {
+            Authorization: `Bearer ${token.secretToken}`,
+            'User-Agent': userAgent,
+            Accept: '*/*',
+            'Content-Type': 'application/json',
+          },
+          validateStatus: () => true,
+        },
+      )
+      if (res.status < 200 || res.status >= 300) {
+        const msg =
+          (res.data && (res.data.message || res.data.error)) ||
+          `Sora username check failed with status ${res.status}`
+        throw new HttpException(
+          { message: msg, upstreamStatus: res.status },
+          res.status,
+        )
+      }
+      return res.data
+    } catch (err: any) {
+      const status = err?.response?.status ?? HttpStatus.BAD_GATEWAY
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.statusText ||
+        err?.message ||
+        'Sora username check request failed'
+      throw new HttpException(
+        { message, upstreamStatus: err?.response?.status ?? null },
+        status,
+      )
+    }
+  }
+
+  async updateCharacter(
+    userId: string,
+    tokenId: string,
+    characterId: string,
+    payload: { username?: string; display_name?: string | null; profile_asset_pointer?: any },
+  ) {
+    const token = await this.resolveSoraToken(userId, tokenId)
+    if (!token || token.provider.vendor !== 'sora') {
+      throw new Error('token not found or not a Sora token')
+    }
+
+    const baseUrl = await this.resolveBaseUrl(token, 'sora', 'https://sora.chatgpt.com')
+    const url = new URL(`/backend/project_y/characters/${characterId}/update`, baseUrl).toString()
+    const userAgent = token.userAgent || 'TapCanvas/1.0'
+
+    try {
+      const res = await axios.post(
+        url,
+        {
+          username: payload.username,
+          display_name: payload.display_name ?? null,
+          profile_asset_pointer: payload.profile_asset_pointer ?? null,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token.secretToken}`,
+            'User-Agent': userAgent,
+            Accept: '*/*',
+            'Content-Type': 'application/json',
+          },
+          validateStatus: () => true,
+        },
+      )
+      if (res.status < 200 || res.status >= 300) {
+        const msg =
+          (res.data && (res.data.message || res.data.error)) ||
+          `Sora update character failed with status ${res.status}`
+        throw new HttpException(
+          { message: msg, upstreamStatus: res.status },
+          res.status,
+        )
+      }
+      return res.data
+    } catch (err: any) {
+      const status = err?.response?.status ?? HttpStatus.BAD_GATEWAY
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.statusText ||
+        err?.message ||
+        'Sora update character request failed'
       throw new HttpException(
         { message, upstreamStatus: err?.response?.status ?? null },
         status,

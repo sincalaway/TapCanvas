@@ -225,6 +225,62 @@ export async function listSoraCharacters(
   return body
 }
 
+export async function deleteSoraCharacter(tokenId: string, characterId: string): Promise<void> {
+  const qs = new URLSearchParams({ tokenId, characterId })
+  const r = await fetch(`${API_BASE}/sora/characters/delete?${qs.toString()}`, withAuth())
+  if (!r.ok) throw new Error(`delete sora character failed: ${r.status}`)
+}
+
+export async function checkSoraCharacterUsername(
+  tokenId: string | null,
+  username: string,
+): Promise<void> {
+  const r = await fetch(`${API_BASE}/sora/characters/check-username`, withAuth({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tokenId: tokenId || undefined, username }),
+  }))
+  let body: any = null
+  try {
+    body = await r.json()
+  } catch {
+    body = null
+  }
+  if (!r.ok) {
+    const msg =
+      (body && (body.message || body.error)) ||
+      `check sora username failed: ${r.status}`
+    throw new Error(msg)
+  }
+}
+
+export async function updateSoraCharacter(payload: {
+  tokenId: string
+  characterId: string
+  username?: string
+  display_name?: string | null
+  profile_asset_pointer?: any
+}): Promise<any> {
+  const r = await fetch(`${API_BASE}/sora/characters/update`, withAuth({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }))
+  let body: any = null
+  try {
+    body = await r.json()
+  } catch {
+    body = null
+  }
+  if (!r.ok) {
+    const msg =
+      (body && (body.message || body.error)) ||
+      `update sora character failed: ${r.status}`
+    throw new Error(msg)
+  }
+  return body
+}
+
 export async function suggestDraftPrompts(
   query: string,
   provider = 'sora',
