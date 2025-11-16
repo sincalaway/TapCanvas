@@ -288,9 +288,55 @@ export async function runNodeRemote(id: string, get: Getter, set: Setter) {
       }
 
       // 轮询 nf/pending，最多轮询一段时间（例如 ~90s）
+      const tokenId = (data as any)?.videoTokenId as string | undefined
+      let draftSynced = false
+      let lastDraft:
+        | {
+            id: string
+            title: string | null
+            prompt: string | null
+            thumbnailUrl: string | null
+            videoUrl: string | null
+          }
+        | null = null
+
+      async function syncDraftVideo(force = false) {
+        if (!force && draftSynced) return null
+        draftSynced = true
+        try {
+          const draft = await getSoraVideoDraftByTask(taskId, tokenId || null)
+          lastDraft = draft
+          if (draft.videoUrl) {
+            const patch: any = {
+              videoUrl: draft.videoUrl,
+            }
+            if (draft.thumbnailUrl) {
+              patch.videoThumbnailUrl = draft.thumbnailUrl
+            }
+            if (draft.title) {
+              patch.videoTitle = draft.title
+            }
+            setNodeStatus(id, 'running', patch)
+            appendLog(
+              id,
+              `[${nowLabel()}] 已从草稿同步生成的视频（task_id=${taskId}），可预览。`,
+            )
+          }
+          return draft
+        } catch (err: any) {
+          const msg = err?.message || '同步 Sora 草稿失败'
+          appendLog(id, `[${nowLabel()}] error: ${msg}`)
+          return null
+        }
+      }
+
       let progress = 10
-      const maxRounds = 30
-      for (let round = 0; round < maxRounds; round++) {
+      const pollIntervalMs = 3000
+      const pollTimeoutMs = 3 * 60 * 1000
+      const startTime = Date.now()
+      let finishedFromPending = false
+
+      while (Date.now() - startTime < pollTimeoutMs) {
         if (isCanceled(id)) {
           setNodeStatus(id, 'canceled', { progress: 0 })
           appendLog(id, `[${nowLabel()}] 已取消 Sora 视频任务`)
@@ -300,65 +346,16 @@ export async function runNodeRemote(id: string, get: Getter, set: Setter) {
 
         try {
           const pending = await listSoraPendingVideos(null)
-          const found = pending.find((t: any) => t.id === taskId)
-
-          // pending 列表为空：认为全局无任务，尝试按 task_id 从草稿里获取最终结果
           if (!pending.length) {
-            // 任务已不在队列中，尝试通过 task_id 反查草稿并填充最终视频 URL
-            let videoUrl: string | null = null
-            try {
-              const tokenId = (data as any)?.videoTokenId as string | undefined
-              const draft = await getSoraVideoDraftByTask(taskId, tokenId || null)
-              videoUrl = draft.videoUrl || null
-            } catch {
-              videoUrl = null
-            }
-
-            const successPreview =
-              videoUrl
-                ? { type: 'text' as const, value: 'Sora 视频已生成，可在节点中预览。' }
-                : {
-                    type: 'text' as const,
-                    value: `Sora 视频已生成（任务 ID: ${taskId}），已写入 Sora 草稿列表。`,
-                  }
-
-            setNodeStatus(id, 'success', {
-              progress: 100,
-              lastResult: {
-                id: taskId,
-                at: Date.now(),
-                kind,
-                preview: successPreview,
-              },
-              soraVideoTask: res,
-              videoTaskId: taskId,
-              videoInpaintFileId: inpaintFileId || null,
-              videoOrientation: orientation,
-              videoPrompt: prompt,
-              videoDurationSeconds,
-              videoUrl: videoUrl || (data as any)?.videoUrl || null,
-            })
-
-            if (videoUrl) {
-              appendLog(
-                id,
-                `[${nowLabel()}] Sora 视频已生成并同步到节点，可直接预览（task_id=${taskId}）。`,
-              )
-            } else {
-              appendLog(
-                id,
-                `[${nowLabel()}] Sora 视频已生成并写入草稿（task_id=${taskId}），可在 Sora 草稿 / 作品中查看。`,
-              )
-            }
-
-            endRunToken(id)
-            return
+            finishedFromPending = true
+            await syncDraftVideo(true)
+            break
           }
 
-          // 列表非空但未找到当前 task：说明还有其它任务在跑，当前任务可能刚刚完成或列表尚未同步
-          // 为了保险，这种情况下继续轮询一段时间，而不是立即去查草稿。
+          const found = pending.find((t: any) => t.id === taskId)
           if (!found) {
-            await new Promise((resolve) => setTimeout(resolve, 3000))
+            await syncDraftVideo()
+            await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
             continue
           }
 
@@ -376,15 +373,57 @@ export async function runNodeRemote(id: string, get: Getter, set: Setter) {
             soraVideoTask: found,
           })
 
-          // 简单间隔 3s
-          await new Promise((resolve) => setTimeout(resolve, 3000))
+          await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
         } catch {
-          // 忽略单次轮询失败，稍后重试
-          await new Promise((resolve) => setTimeout(resolve, 3000))
+          await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
         }
       }
 
-      // 轮询结束但任务仍在 pending 列表中：停止轮询，提示去 Sora 查看后续状态
+      if (finishedFromPending) {
+        const finalDraft = lastDraft
+        const videoUrl = finalDraft?.videoUrl || (data as any)?.videoUrl || null
+        const successPreview =
+          videoUrl
+            ? { type: 'text' as const, value: 'Sora 视频已生成，可在节点中预览。' }
+            : {
+                type: 'text' as const,
+                value: `Sora 视频已生成（任务 ID: ${taskId}），已写入 Sora 草稿列表。`,
+              }
+
+        setNodeStatus(id, 'success', {
+          progress: 100,
+          lastResult: {
+            id: taskId,
+            at: Date.now(),
+            kind,
+            preview: successPreview,
+          },
+          soraVideoTask: res,
+          videoTaskId: taskId,
+          videoInpaintFileId: inpaintFileId || null,
+          videoOrientation: orientation,
+          videoPrompt: prompt,
+          videoDurationSeconds,
+            videoUrl: videoUrl,
+        })
+
+        if (videoUrl) {
+          appendLog(
+            id,
+            `[${nowLabel()}] Sora 视频已生成并同步到节点，可直接预览（task_id=${taskId}）。`,
+          )
+        } else {
+          appendLog(
+            id,
+            `[${nowLabel()}] Sora 视频已生成并写入草稿（task_id=${taskId}），可在 Sora 草稿 / 作品中查看。`,
+          )
+        }
+
+        endRunToken(id)
+        return
+      }
+
+      await syncDraftVideo(true)
       setNodeStatus(id, 'success', {
         progress,
         lastResult: {

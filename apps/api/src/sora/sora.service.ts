@@ -777,10 +777,16 @@ export class SoraService {
           data: res.data,
           body,
         })
-        throw new HttpException(
-          { message: msg, upstreamStatus: res.status, upstreamData: res.data ?? null },
-          res.status,
-        )
+      this.logger.error('getDraftByTaskId upstream error', {
+        taskId,
+        tokenId,
+        status: res.status,
+        data: res.data,
+      })
+      throw new HttpException(
+        { message: msg, upstreamStatus: res.status, upstreamData: res.data ?? null },
+        res.status,
+      )
       }
       return res.data
     } catch (err: any) {
@@ -1036,6 +1042,7 @@ export class SoraService {
     const baseUrl = await this.resolveBaseUrl(token, 'sora', 'https://sora.chatgpt.com')
     const url = new URL('/backend/project_y/profile/drafts', baseUrl).toString()
     const userAgent = token.userAgent || 'TapCanvas/1.0'
+    this.logger.debug('getDraftByTaskId request', { userId, tokenId, taskId, url })
 
     try {
       const res = await axios.get(url, {
@@ -1073,6 +1080,7 @@ export class SoraService {
       })
 
       if (!matched) {
+        this.logger.warn('getDraftByTaskId no match', { taskId, tokenId, itemsCount: items.length })
         throw new HttpException(
           { message: '未在 Sora 草稿中找到对应视频，请稍后再试或在 Sora 中手动查看', upstreamStatus: 404 },
           HttpStatus.NOT_FOUND,
@@ -1090,6 +1098,14 @@ export class SoraService {
         matched.url ||
         enc.source?.path ||
         null
+
+      this.logger.debug('getDraftByTaskId success', {
+        taskId,
+        tokenId,
+        matchedId: matched.id,
+        videoUrl,
+        thumbnail,
+      })
 
       return {
         id: matched.id,
@@ -1109,6 +1125,14 @@ export class SoraService {
         err?.response?.statusText ||
         err?.message ||
         'Sora drafts lookup request failed'
+      this.logger.error('getDraftByTaskId exception', {
+        taskId,
+        tokenId,
+        status,
+        message,
+        upstreamData: err?.response?.data ?? null,
+        stack: err?.stack,
+      })
       throw new HttpException(
         { message, upstreamStatus: err?.response?.status ?? null, upstreamData: err?.response?.data ?? null },
         status,

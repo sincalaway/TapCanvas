@@ -319,7 +319,9 @@ export async function getSoraVideoDraftByTask(
 ): Promise<{ id: string; title: string | null; prompt: string | null; thumbnailUrl: string | null; videoUrl: string | null }> {
   const qs = new URLSearchParams({ taskId })
   if (tokenId) qs.set('tokenId', tokenId)
-  const r = await fetch(`${API_BASE}/sora/video/draft-by-task?${qs.toString()}`, withAuth())
+  const url = `${API_BASE}/sora/video/draft-by-task?${qs.toString()}`
+  console.debug('[getSoraVideoDraftByTask] requesting', { url, taskId, tokenId })
+  const r = await fetch(url, withAuth())
   let body: any = null
   try {
     body = await r.json()
@@ -330,8 +332,10 @@ export async function getSoraVideoDraftByTask(
     const msg =
       (body && (body.message || body.error)) ||
       `get sora video draft failed: ${r.status}`
+    console.debug('[getSoraVideoDraftByTask] failed', { taskId, tokenId, status: r.status, body })
     throw new Error(msg)
   }
+  console.debug('[getSoraVideoDraftByTask] success', { taskId, tokenId, body })
   return {
     id: body.id,
     title: body.title ?? null,
