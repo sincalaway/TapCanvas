@@ -408,29 +408,36 @@ export class SoraService {
     characterId: string,
     payload: { username?: string; display_name?: string | null; profile_asset_pointer?: any },
   ) {
-    const token = await this.resolveSoraToken(userId, tokenId)
-    if (!token || token.provider.vendor !== 'sora') {
-      throw new Error('token not found or not a Sora token')
-    }
-
-    const baseUrl = await this.resolveBaseUrl(token, 'sora', 'https://sora.chatgpt.com')
-    const url = new URL(`/backend/project_y/characters/${characterId}/update`, baseUrl).toString()
-    const userAgent = token.userAgent || 'TapCanvas/1.0'
-
     try {
+      const token = await this.resolveSoraToken(userId, tokenId)
+      if (!token || token.provider.vendor !== 'sora') {
+        throw new Error('token not found or not a Sora token')
+      }
+
+      const baseUrl = await this.resolveBaseUrl(token, 'sora', 'https://sora.chatgpt.com')
+      const url = new URL(`/backend/project_y/characters/${characterId}/update`, baseUrl).toString()
+      const userAgent = token.userAgent || 'TapCanvas/1.0'
+      this.logger.debug(url,'url',{
+            Authorization: `Bearer ${token.secretToken}`,
+            'User-Agent': userAgent,
+            Accept: '*/*',
+            'Content-Type': 'application/json',
+          },{
+          username: payload.username,
+          display_name: payload.display_name ?? null,
+          profile_asset_pointer: payload.profile_asset_pointer ?? null,
+        })
       const res = await axios.post(
         url,
         {
           username: payload.username,
-          display_name: payload.display_name ?? null,
-          profile_asset_pointer: payload.profile_asset_pointer ?? null,
+          display_name:  null,
+          profile_asset_pointer: null,
         },
         {
           headers: {
             Authorization: `Bearer ${token.secretToken}`,
             'User-Agent': userAgent,
-            Accept: '*/*',
-            'Content-Type': 'application/json',
           },
           validateStatus: () => true,
         },
@@ -446,6 +453,17 @@ export class SoraService {
       }
       return res.data
     } catch (err: any) {
+      // 调试信息：打印完整错误上下文，便于比对 access_token / UA 等
+      // 注意：生产环境应考虑脱敏，这里优先满足本地调试需求。
+      // eslint-disable-next-line no-console
+      console.error('Sora updateCharacter error:', {
+        message: err?.message,
+        status: err?.response?.status,
+        data: err?.response?.data,
+        url: err?.config?.url,
+        headers: err?.config?.headers,
+      })
+
       const status = err?.response?.status ?? HttpStatus.BAD_GATEWAY
       const message =
         err?.response?.data?.message ||
@@ -453,7 +471,11 @@ export class SoraService {
         err?.message ||
         'Sora update character request failed'
       throw new HttpException(
-        { message, upstreamStatus: err?.response?.status ?? null },
+        {
+          message,
+          upstreamStatus: err?.response?.status ?? null,
+          upstreamData: err?.response?.data ?? null,
+        },
         status,
       )
     }

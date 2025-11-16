@@ -387,38 +387,52 @@ export default function AssetPanel(): JSX.Element | null {
                 <Tabs.Panel value="sora-characters" pt="xs">
                   <Stack gap="sm">
                     <Group justify="space-between">
-                      <Text size="sm">Sora Token 身份</Text>
-                      <Select
-                        size="xs"
-                        placeholder={soraTokens.length === 0 ? '暂无 Sora 密钥' : '选择 Token'}
-                        data={soraTokens.map((t) => ({ value: t.id, label: t.label }))}
-                        value={selectedTokenId}
-                        comboboxProps={{ zIndex: 8005 }}
-                        onChange={async (value) => {
-                          setSelectedTokenId(value)
-                          setSoraCharUsingShared(false)
-                          setCharacters([])
-                          setCharCursor(null)
-                          if (value) {
-                            setCharLoading(true)
-                            try {
-                              const data = await listSoraCharacters(value)
-                              setCharacters(data.items || [])
-                              setCharCursor(data.cursor || null)
-                            } catch (err: any) {
-                              console.error(err)
-                              alert('当前配置不可用，请稍后再试')
-                              setCharacters([])
-                              setCharCursor(null)
-                            } finally {
-                              setCharLoading(false)
-                            }
-                          } else {
+                      <Group gap="xs">
+                        <Text size="sm">Sora Token 身份</Text>
+                        <Select
+                          size="xs"
+                          placeholder={soraTokens.length === 0 ? '暂无 Sora 密钥' : '选择 Token'}
+                          data={soraTokens.map((t) => ({ value: t.id, label: t.label }))}
+                          value={selectedTokenId}
+                          comboboxProps={{ zIndex: 8005 }}
+                          onChange={async (value) => {
+                            setSelectedTokenId(value)
+                            setSoraCharUsingShared(false)
                             setCharacters([])
                             setCharCursor(null)
-                          }
+                            if (value) {
+                              setCharLoading(true)
+                              try {
+                                const data = await listSoraCharacters(value)
+                                setCharacters(data.items || [])
+                                setCharCursor(data.cursor || null)
+                              } catch (err: any) {
+                                console.error(err)
+                                alert('当前配置不可用，请稍后再试')
+                                setCharacters([])
+                                setCharCursor(null)
+                              } finally {
+                                setCharLoading(false)
+                              }
+                            } else {
+                              setCharacters([])
+                              setCharCursor(null)
+                            }
+                          }}
+                        />
+                      </Group>
+                      <Button
+                        size="xs"
+                        variant="light"
+                        disabled={!selectedTokenId}
+                        onClick={() => {
+                          if (!selectedTokenId) return
+                          // 这里仅预留入口，后续可以接入创建角色表单
+                          alert('创建角色功能暂未实现（需要接入 Sora 角色创建接口）')
                         }}
-                      />
+                      >
+                        创建角色
+                      </Button>
                     </Group>
                     {soraCharUsingShared && (
                       <Text size="xs" c="dimmed">
@@ -547,6 +561,8 @@ export default function AssetPanel(): JSX.Element | null {
               }}
               title="重命名 Sora 角色"
               centered
+              withinPortal
+              zIndex={8005}
             >
               <Stack gap="sm">
                 <Text size="xs" c="dimmed">
