@@ -490,7 +490,11 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
               maxRows={6}
               placeholder="在这里输入提示词..."
               value={prompt}
-              onChange={(e)=>setPrompt(e.currentTarget.value)}
+              onChange={(e)=>{
+                const v = e.currentTarget.value
+                setPrompt(v)
+                updateNodeData(id, { prompt: v })
+              }}
               onBlur={() => {
                 setPromptSuggestions([])
               }}
@@ -632,17 +636,7 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
               size="xs"
               loading={status === 'running' || status === 'queued'}
               onClick={() => {
-                let nextPrompt = prompt
-                // 图片节点：如果有上游文本，将其拼接进提示词
-                if (kind === 'image') {
-                  const base = (prompt || (data as any)?.prompt || '').trim()
-                  const up = (upstreamText || '').trim()
-                  if (up) {
-                    nextPrompt = base ? `${base}\n\n${up}` : up
-                  } else {
-                    nextPrompt = base
-                  }
-                }
+                const nextPrompt = (prompt || (data as any)?.prompt || '').trim()
 
                 const patch: any = { prompt: nextPrompt, aspect, scale }
                 if (kind === 'textToImage') patch.geminiModel = modelKey

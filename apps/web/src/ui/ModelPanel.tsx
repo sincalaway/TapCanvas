@@ -257,64 +257,58 @@ export default function ModelPanel(): JSX.Element | null {
               <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
                 <Stack gap="sm">
                   <Paper withBorder radius="md" p="sm" style={{ position: 'relative' }}>
-                    <Group justify="space-between" mb={4}>
-                      <div>
-                        <Group gap={6}>
-                          <Title order={6}>Sora</Title>
-                          <Badge color="blue" size="xs">
-                            Beta
-                          </Badge>
-                        </Group>
-                        <Text size="xs" c="dimmed">
-                          配置多个 Sora API Token，共享同一厂商额度
-                        </Text>
-                      </div>
+                    <Group justify="space-between" align="flex-start" mb={4}>
+                      <Group gap={6}>
+                        <Title order={6}>Sora</Title>
+                        <Badge color="blue" size="xs">
+                          Beta
+                        </Badge>
+                      </Group>
                       <Button size="xs" onClick={openModalForNew}>
                         管理密钥
                       </Button>
                     </Group>
+                    <Text size="xs" c="dimmed" mb={2}>
+                      配置多个 Sora API Token，共享同一厂商额度
+                    </Text>
                     <Text size="xs" c="dimmed">
                       已配置密钥：{tokens.length}
                     </Text>
                   </Paper>
                   <Paper withBorder radius="md" p="sm" style={{ position: 'relative' }}>
-                    <Group justify="space-between" mb={4}>
-                      <div>
-                        <Group gap={6}>
-                          <Title order={6}>Gemini</Title>
-                          <Badge color="grape" size="xs">
-                            Beta
-                          </Badge>
-                        </Group>
-                        <Text size="xs" c="dimmed">
-                          配置 Gemini API Key（Google AI Studio / Vertex AI）
-                        </Text>
-                      </div>
+                    <Group justify="space-between" align="flex-start" mb={4}>
+                      <Group gap={6}>
+                        <Title order={6}>Gemini</Title>
+                        <Badge color="grape" size="xs">
+                          Beta
+                        </Badge>
+                      </Group>
                       <Button size="xs" onClick={openGeminiModalForNew}>
                         管理密钥
                       </Button>
                     </Group>
+                    <Text size="xs" c="dimmed" mb={2}>
+                      配置 Gemini API Key（Google AI Studio / Vertex AI）
+                    </Text>
                     <Text size="xs" c="dimmed">
                       已配置密钥：{geminiTokens.length}
                     </Text>
                   </Paper>
                   <Paper withBorder radius="md" p="sm" style={{ position: 'relative' }}>
-                    <Group justify="space-between" mb={4}>
-                      <div>
-                        <Group gap={6}>
-                          <Title order={6}>Qwen</Title>
-                          <Badge color="teal" size="xs">
-                            Beta
-                          </Badge>
-                        </Group>
-                        <Text size="xs" c="dimmed">
-                          配置 DashScope API Key（qwen-image-plus 等）
-                        </Text>
-                      </div>
+                    <Group justify="space-between" align="flex-start" mb={4}>
+                      <Group gap={6}>
+                        <Title order={6}>Qwen</Title>
+                        <Badge color="teal" size="xs">
+                          Beta
+                        </Badge>
+                      </Group>
                       <Button size="xs" onClick={openQwenModalForNew}>
                         管理密钥
                       </Button>
                     </Group>
+                    <Text size="xs" c="dimmed" mb={2}>
+                      配置 DashScope API Key（qwen-image-plus 等）
+                    </Text>
                     <Text size="xs" c="dimmed">
                       已配置密钥：{qwenTokens.length}
                     </Text>
