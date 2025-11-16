@@ -186,6 +186,9 @@ export async function runNodeRemote(id: string, get: Getter, set: Setter) {
       const orientation: 'portrait' | 'landscape' | 'square' =
         aspect === '9:16' ? 'portrait' : aspect === '1:1' ? 'square' : 'landscape'
       const remixTargetId = ((data as any)?.remixTargetId as string | undefined) || null
+      const videoDurationSeconds: number =
+        (data as any)?.videoDurationSeconds === 15 ? 15 : 10
+      const nFrames = videoDurationSeconds === 15 ? 450 : 300
 
       setNodeStatus(id, 'running', { progress: 5 })
       appendLog(
@@ -224,7 +227,7 @@ export async function runNodeRemote(id: string, get: Getter, set: Setter) {
         prompt,
         orientation,
         size: 'small',
-        n_frames: 300,
+        n_frames: nFrames,
         inpaintFileId,
         imageUrl: imageUrlForUpload,
         remixTargetId,
@@ -251,6 +254,7 @@ export async function runNodeRemote(id: string, get: Getter, set: Setter) {
         videoInpaintFileId: inpaintFileId || null,
         videoOrientation: orientation,
         videoPrompt: prompt,
+        videoDurationSeconds,
       })
 
       appendLog(
@@ -273,6 +277,7 @@ export async function runNodeRemote(id: string, get: Getter, set: Setter) {
           videoInpaintFileId: inpaintFileId || null,
           videoOrientation: orientation,
           videoPrompt: prompt,
+          videoDurationSeconds,
         })
         appendLog(
           id,
@@ -312,6 +317,7 @@ export async function runNodeRemote(id: string, get: Getter, set: Setter) {
               videoInpaintFileId: inpaintFileId || null,
               videoOrientation: orientation,
               videoPrompt: prompt,
+              videoDurationSeconds,
             })
             appendLog(
               id,
@@ -357,6 +363,7 @@ export async function runNodeRemote(id: string, get: Getter, set: Setter) {
         videoInpaintFileId: inpaintFileId || null,
         videoOrientation: orientation,
         videoPrompt: prompt,
+        videoDurationSeconds,
       })
 
       appendLog(

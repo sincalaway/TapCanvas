@@ -104,6 +104,9 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
   const [imageModel, setImageModel] = React.useState<string>((data as any)?.imageModel || 'qwen-image-plus')
    // 视频模型，目前仅支持 Sora2，占个位便于后续扩展
   const [videoModel, setVideoModel] = React.useState<string>((data as any)?.videoModel || 'sora-2')
+  const [videoDuration, setVideoDuration] = React.useState<number>(
+    (data as any)?.videoDurationSeconds === 15 ? 15 : 10,
+  )
   const [mentionOpen, setMentionOpen] = React.useState(false)
   const [mentionFilter, setMentionFilter] = React.useState('')
   const [mentionItems, setMentionItems] = React.useState<any[]>([])
@@ -1038,6 +1041,24 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
                   }}
                 />
                 <Select
+                  label="时长"
+                  data={[
+                    { value: '10', label: '10 秒' },
+                    { value: '15', label: '15 秒' },
+                  ]}
+                  value={String(videoDuration)}
+                  onChange={(v) => setVideoDuration(v ? Number(v) : 10)}
+                  comboboxProps={{
+                    withinPortal: true,
+                    styles: {
+                      dropdown: {
+                        minWidth: 160,
+                        whiteSpace: 'nowrap',
+                      },
+                    },
+                  }}
+                />
+                <Select
                   label="画面比例"
                   data={[
                     { value: '16:9', label: '16:9' },
@@ -1081,6 +1102,7 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
                 if (kind === 'composeVideo') {
                   patch.sampleCount = sampleCount
                   patch.videoModel = videoModel
+                  patch.videoDurationSeconds = videoDuration
                 }
 
                 // 同步本地状态，便于预览区展示最新提示词

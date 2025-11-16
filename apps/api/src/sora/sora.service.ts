@@ -431,12 +431,16 @@ export class SoraService {
     const userAgent = token.userAgent || 'TapCanvas/1.0'
 
     // 若指定了 remix 目标，则优先走 remix 模式（不再尝试图生）
-    let inpaintFileId = payload.inpaintFileId ?? null
+    let inpaintFileId = this.normalizeSoraFileId(payload.inpaintFileId)
     const remixTargetId = payload.remixTargetId || null
 
     // 若无 remix，且未显式提供 file_id，但有图片 URL，则尝试先上传图片到 Sora 获取 file_id
     if (!remixTargetId && !inpaintFileId && payload.imageUrl) {
       try {
+        // eslint-disable-next-line no-console
+        console.log('Sora createVideoTask: start image upload for imageUrl', {
+          imageUrl: payload.imageUrl,
+        })
         const imgRes = await axios.get(payload.imageUrl, {
           responseType: 'arraybuffer',
           timeout: 15000,
@@ -453,6 +457,11 @@ export class SoraService {
         form.append('use_case', 'profile')
 
         const uploadUrl = new URL('/backend/project_y/file/upload', baseUrl).toString()
+        // eslint-disable-next-line no-console
+        console.log('Sora createVideoTask: uploading image to Sora', {
+          uploadUrl,
+          contentType,
+        })
         const uploadRes = await axios.post(uploadUrl, form, {
           headers: {
             ...form.getHeaders(),
@@ -466,7 +475,20 @@ export class SoraService {
 
         if (uploadRes.status >= 200 && uploadRes.status < 300) {
           const up = uploadRes.data as any
-          inpaintFileId = (up && (up.file_id as string | undefined)) || null
+          inpaintFileId = this.normalizeSoraFileId(up && (up.file_id as string | undefined))
+          // eslint-disable-next-line no-console
+          console.log('Sora createVideoTask: image upload success', {
+            status: uploadRes.status,
+            file_id: inpaintFileId,
+            asset_pointer: up?.asset_pointer,
+            raw: up,
+          })
+        } else {
+          // eslint-disable-next-line no-console
+          console.log('Sora createVideoTask: image upload failed', {
+            status: uploadRes.status,
+            data: uploadRes.data,
+          })
         }
       } catch {
         // 上传失败时忽略，退回纯文本生视频
@@ -522,7 +544,8 @@ export class SoraService {
       kind: 'video',
       prompt: payload.prompt,
       title: null,
-      orientation: payload.orientation || 'portrait',
+      // Sora 当前稳定支持 portrait，先固定为 portrait，避免 landscape/square 异常
+      orientation: 'portrait',
       size: payload.size || 'small',
       n_frames: typeof payload.n_frames === 'number' ? payload.n_frames : 300,
       inpaint_items: inpaintFileId
@@ -541,6 +564,14 @@ export class SoraService {
     }
 
     try {
+      // eslint-disable-next-line no-console
+      console.log('Sora createVideoTask: calling nf/create', url)
+      // 展开请求体，包含 inpaint_items 具体内容
+      // eslint-disable-next-line no-console
+      console.log(
+        'Sora createVideoTask: payload',
+        typeof body === 'object' ? JSON.stringify(body, null, 2) : body,
+      )
       const res = await axios.post(url, body, {
         headers: {
           Authorization: `Bearer ${token.secretToken}`,
@@ -1147,6 +1178,20 @@ export class SoraService {
 
     // 3. 最后使用内置默认
     return fallback
+  }
+
+  /**
+   * 将 Sora 各类 file id 规范化为纯 `file_...` 形式。
+   * 示例：
+   * - `file_00000000491071f6a497cfeba74fe8dd` → 原样返回
+   * - `5b9033ba1441172#file_00000000765871f79cb1e713eef290eb#thumbnail` → 截成 `file_00000000765871f79cb1e713eef290eb`
+   */
+  private normalizeSoraFileId(id: string | null | undefined): string | null {
+    if (!id) return null
+    if (id.startsWith('file_')) return id
+    const m = id.match(/file_[^#]+/)
+    if (m && m[0]) return m[0]
+    return id
   }
 
   private async registerSharedFailure(tokenId: string) {
