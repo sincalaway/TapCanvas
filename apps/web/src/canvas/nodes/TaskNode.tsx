@@ -4,7 +4,7 @@ import { Handle, Position, NodeToolbar } from 'reactflow'
 import { useRFStore } from '../store'
 import { useUIStore } from '../../ui/uiStore'
 import { ActionIcon, Group, Paper, Textarea, Select, NumberInput, Button, Text } from '@mantine/core'
-import { IconMaximize, IconDownload, IconArrowsDiagonal2, IconBrush, IconPhotoUp, IconDots, IconAdjustments, IconUpload, IconPlayerPlay, IconTexture, IconVideo, IconArrowRight, IconScissors, IconPhotoEdit } from '@tabler/icons-react'
+import { IconMaximize, IconDownload, IconArrowsDiagonal2, IconBrush, IconPhotoUp, IconDots, IconAdjustments, IconUpload, IconPlayerPlay, IconTexture, IconVideo, IconArrowRight, IconScissors, IconPhotoEdit, IconChevronDown, IconChevronUp } from '@tabler/icons-react'
 import { markDraftPromptUsed, suggestDraftPrompts } from '../../api/server'
 
 type Data = {
@@ -68,6 +68,15 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
   const selectedCount = useRFStore(s => s.nodes.reduce((acc, n) => acc + (n.selected ? 1 : 0), 0))
   const fileRef = React.useRef<HTMLInputElement|null>(null)
   const imageUrl = (data as any)?.imageUrl as string | undefined
+  const imageResults = React.useMemo(() => {
+    const raw = (data as any)?.imageResults as { url: string }[] | undefined
+    if (raw && Array.isArray(raw) && raw.length > 0) return raw
+    const single = imageUrl || null
+    return single ? [{ url: single }] : []
+  }, [data, imageUrl])
+  const [imageExpanded, setImageExpanded] = React.useState(false)
+  const [imagePrimaryIndex, setImagePrimaryIndex] = React.useState(0)
+  const [imageSelectedIndex, setImageSelectedIndex] = React.useState(0)
   const [hovered, setHovered] = React.useState<number|null>(null)
   const [showMore, setShowMore] = React.useState(false)
   const moreRef = React.useRef<HTMLDivElement|null>(null)
@@ -92,7 +101,7 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
     const sd: any = src.data || {}
     const skind: string | undefined = sd.kind
     const uText =
-      skind === 'textToImage'
+      skind === 'textToImage' || skind === 'image'
         ? (sd.prompt as string | undefined) || (sd.label as string | undefined) || null
         : null
     const uImg =
@@ -322,11 +331,13 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
       {/* Content Area for Image/Video/Text kinds */}
       {kind === 'image' && (
         <div style={{ position: 'relative', marginTop: 6 }}>
-          {!(imageUrl || upstreamImageUrl) ? (
+          {imageResults.length === 0 ? (
             <>
               {/* 快捷操作列表，增强引导 */}
               <div style={{ width: 296, display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 2px' }} onMouseLeave={()=>setHovered(null)}>
                 {[
+                  { label: '上传图片并编辑', icon: <IconUpload size={16} />, onClick: () => fileRef.current?.click(), hint: '图片大小不能超过30MB' },
+                  { label: '图片换背景', icon: <IconTexture size={16} />, onClick: () => connectToRight('image','Image') },
                   { label: '图生视频', icon: <IconVideo size={16} />, onClick: () => connectToRight('video','Video') },
                   { label: '反推提示词', icon: <IconAdjustments size={16} />, onClick: () => connectImageToText() },
                 ].map((row, idx) => {
@@ -368,16 +379,268 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
             </>
           ) : (
             <div style={{ position: 'relative' }}>
-              <img src={imageUrl || upstreamImageUrl || ''} alt="uploaded" style={{ width: 296, maxWidth: '100%', height: 'auto', borderRadius: 10, display: 'block', border: '1px solid rgba(127,127,127,.35)' }} />
-              <ActionIcon size={28} variant="light" style={{ position: 'absolute', right: 8, top: 8 }} title="替换图片" onClick={()=>fileRef.current?.click()}>
-                <IconUpload size={14} />
-              </ActionIcon>
-              <input ref={fileRef} type="file" accept="image/*" hidden onChange={async (e)=>{
-                const f = e.currentTarget.files?.[0]
-                if (!f) return
-                const url = URL.createObjectURL(f)
-                updateNodeData(id, { imageUrl: url })
-              }} />
+              {/* 展开时的顶部悬浮工具条，针对当前选中图片生效 */}
+              {imageExpanded && imageResults.length > 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: -36,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 5,
+                  }}
+                >
+                  <Paper
+                    withBorder
+                    shadow="sm"
+                    radius="xl"
+                    className="glass"
+                    p={4}
+                    style={{ backdropFilter: 'blur(12px)' }}
+                  >
+                    <Group gap={6}>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        leftSection={<IconDownload size={14} />}
+                        onClick={() => {
+                          const img = imageResults[imageSelectedIndex] || imageResults[0]
+                          if (!img?.url) return
+                          const a = document.createElement('a')
+                          a.href = img.url
+                          a.download = `image-${Date.now()}`
+                          document.body.appendChild(a)
+                          a.click()
+                          a.remove()
+                        }}
+                      >
+                        下载
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        leftSection={<IconArrowsDiagonal2 size={14} />}
+                        onClick={() => {
+                          // TODO: 接入扩图能力
+                          console.log('extend image at', imageSelectedIndex)
+                        }}
+                      >
+                        扩图
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        leftSection={<IconBrush size={14} />}
+                        onClick={() => {
+                          // TODO: 接入描图/局部重绘
+                          console.log('inpaint image at', imageSelectedIndex)
+                        }}
+                      >
+                        描图
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        leftSection={<IconPhotoUp size={14} />}
+                        onClick={() => {
+                          // TODO: 接入高清增强
+                          console.log('enhance image at', imageSelectedIndex)
+                        }}
+                      >
+                        增强
+                      </Button>
+                      <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        title="更多操作"
+                        onClick={() => {
+                          // 预留更多操作入口
+                          console.log('more actions for image at', imageSelectedIndex)
+                        }}
+                      >
+                        <IconDots size={14} />
+                      </ActionIcon>
+                    </Group>
+                  </Paper>
+                </div>
+              )}
+              {/* 结果组：折叠 / 展开 */}
+              {!imageExpanded || imageResults.length <= 1 ? (
+                <div style={{ position: 'relative', width: 296 }}>
+                  {/* 背后影子卡片，暗示多图 */}
+                  {imageResults.length > 1 && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: 8,
+                        top: 8,
+                        width: '100%',
+                        borderRadius: 10,
+                        height: '100%',
+                        background: 'rgba(15,23,42,0.9)',
+                        border: '1px solid rgba(55,65,81,0.7)',
+                        transform: 'translate(4px, 4px)',
+                        zIndex: 0,
+                      }}
+                    />
+                  )}
+                  <div
+                    style={{
+                      position: 'relative',
+                      borderRadius: 10,
+                      overflow: 'hidden',
+                      boxShadow: '0 10px 25px rgba(0,0,0,.55)',
+                      border: '1px solid rgba(148,163,184,0.8)',
+                      background: 'black',
+                    }}
+                  >
+                    <img
+                      src={imageResults[imagePrimaryIndex]?.url}
+                      alt="主图"
+                      style={{
+                        width: '100%',
+                        height: 'auto',
+                        display: 'block',
+                        objectFit: 'cover',
+                      }}
+                    />
+                    {/* 主图替换按钮 */}
+                    <ActionIcon
+                      size={28}
+                      variant="light"
+                      style={{ position: 'absolute', right: 8, top: 8 }}
+                      title="替换图片"
+                      onClick={() => fileRef.current?.click()}
+                    >
+                      <IconUpload size={14} />
+                    </ActionIcon>
+                    {/* 数量 + 展开标签 */}
+                    {imageResults.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setImageExpanded(true)}
+                        style={{
+                          position: 'absolute',
+                          right: 8,
+                          bottom: 8,
+                          padding: '2px 8px',
+                          borderRadius: 999,
+                          border: 'none',
+                          background: 'rgba(15,23,42,0.85)',
+                          color: '#e5e7eb',
+                          fontSize: 11,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <span>{imageResults.length}</span>
+                        <IconChevronDown size={12} />
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={async (e) => {
+                      const f = e.currentTarget.files?.[0]
+                      if (!f) return
+                      const url = URL.createObjectURL(f)
+                      updateNodeData(id, { imageUrl: url })
+                    }}
+                  />
+                </div>
+              ) : (
+                <div style={{ width: 296, overflow: 'hidden' }}>
+                  {/* 展开画廊 */}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {imageResults.map((img, idx) => {
+                      const isPrimary = idx === imagePrimaryIndex
+                      const isSelected = idx === imageSelectedIndex
+                      return (
+                        <div
+                          key={`${idx}-${img.url}`}
+                          style={{
+                            position: 'relative',
+                            flex: idx === 0 ? '0 0 60%' : '0 0 40%',
+                            borderRadius: 10,
+                            overflow: 'hidden',
+                            border: isSelected
+                              ? '2px solid rgba(96,165,250,0.9)'
+                              : '1px solid rgba(55,65,81,0.7)',
+                            boxShadow: isSelected
+                              ? '0 10px 25px rgba(37,99,235,.55)'
+                              : '0 6px 18px rgba(0,0,0,.45)',
+                            cursor: 'pointer',
+                            background: 'black',
+                          }}
+                          onClick={() => {
+                            setImageSelectedIndex(idx)
+                          }}
+                        >
+                          <img
+                            src={img.url}
+                            alt={`结果 ${idx + 1}`}
+                            style={{
+                              width: '100%',
+                              height: 140,
+                              objectFit: 'cover',
+                              display: 'block',
+                            }}
+                          />
+                          {/* 非主图 hover 操作 */}
+                          {!isPrimary && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                inset: 0,
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                justifyContent: 'flex-end',
+                                padding: 6,
+                                background:
+                                  'linear-gradient(to bottom, rgba(15,23,42,0.85), transparent)',
+                                opacity: 0,
+                                transition: 'opacity .15s ease',
+                              }}
+                              className="image-card-hover"
+                            >
+                              <Button
+                                size="xs"
+                                variant="white"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setImagePrimaryIndex(idx)
+                                  setImageSelectedIndex(idx)
+                                }}
+                              >
+                                设为主图
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {/* 折叠/展开标签 */}
+                  <Group justify="space-between" mt={4}>
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      leftSection={<IconChevronUp size={12} />}
+                      onClick={() => setImageExpanded(false)}
+                    >
+                      收起
+                    </Button>
+                    <Text size="xs" c="dimmed">
+                      共 {imageResults.length} 张
+                    </Text>
+                  </Group>
+                </div>
+              )}
             </div>
           )}
           {!imageUrl && upstreamText && (
@@ -505,7 +768,40 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
             transformOrigin: 'top center',
           }}
         >
-          <Text size="xs" c="dimmed" mb={6}>{kind === 'textToImage' ? '文本提示词' : '详情'}</Text>
+          <Text size="xs" c="dimmed" mb={6}>{kind === 'textToImage' ? '文本提示词' : kind === 'composeVideo' ? '视频提示词与素材' : '详情'}</Text>
+          {kind === 'composeVideo' && (upstreamImageUrl || upstreamText) && (
+            <div style={{ marginBottom: 8 }}>
+              {upstreamImageUrl && (
+                <div
+                  style={{
+                    width: '100%',
+                    maxHeight: 140,
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                    marginBottom: upstreamText ? 4 : 0,
+                    border: '1px solid rgba(148,163,184,0.5)',
+                    background: 'rgba(15,23,42,0.9)',
+                  }}
+                >
+                  <img
+                    src={upstreamImageUrl}
+                    alt="上游图片素材"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                </div>
+              )}
+              {upstreamText && (
+                <Text
+                  size="xs"
+                  c="dimmed"
+                  lineClamp={1}
+                  title={upstreamText || undefined}
+                >
+                  {upstreamText}
+                </Text>
+              )}
+            </div>
+          )}
           <div style={{ position: 'relative' }}>
             <Textarea
               autosize
