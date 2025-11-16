@@ -749,54 +749,95 @@ function CanvasInner(): JSX.Element {
           </Stack>
         </Paper>
       )}
-      {insertMenu.open && (
-        <Paper
-          withBorder
-          shadow="md"
-          style={{
-            position: 'fixed',
-            left: insertMenu.x,
-            top: insertMenu.y,
-            zIndex: 70,
-            minWidth: 180,
-          }}
-          onMouseLeave={closeInsertMenu}
-        >
-          <Stack gap={4} p="xs">
-            <Text size="xs" c="dimmed">
-              从文本继续
-            </Text>
-            <Button
-              variant="subtle"
-              size="xs"
-              onClick={() =>
-                handleInsertNodeAt('image', {
-                  x: insertMenu.x,
-                  y: insertMenu.y,
-                  fromNodeId: insertMenu.fromNodeId,
-                  fromHandle: insertMenu.fromHandle,
-                })
-              }
-            >
-              文生图
-            </Button>
-            <Button
-              variant="subtle"
-              size="xs"
-              onClick={() =>
-                handleInsertNodeAt('video', {
-                  x: insertMenu.x,
-                  y: insertMenu.y,
-                  fromNodeId: insertMenu.fromNodeId,
-                  fromHandle: insertMenu.fromHandle,
-                })
-              }
-            >
-              文生视频
-            </Button>
-          </Stack>
-        </Paper>
-      )}
+      {insertMenu.open && (() => {
+        const fromNode = nodes.find(n => n.id === insertMenu.fromNodeId)
+        const fromKind = fromNode?.data?.kind as string | undefined
+        const isFromImage = fromKind === 'image'
+
+        return (
+          <Paper
+            withBorder
+            shadow="md"
+            style={{
+              position: 'fixed',
+              left: insertMenu.x,
+              top: insertMenu.y,
+              zIndex: 70,
+              minWidth: 180,
+            }}
+            onMouseLeave={closeInsertMenu}
+          >
+            <Stack gap={4} p="xs">
+              <Text size="xs" c="dimmed">
+                {isFromImage ? '从图片继续' : '从文本继续'}
+              </Text>
+              {isFromImage ? (
+                <>
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    onClick={() => {
+                      handleInsertNodeAt('video', {
+                        x: insertMenu.x,
+                        y: insertMenu.y,
+                        fromNodeId: insertMenu.fromNodeId,
+                        fromHandle: insertMenu.fromHandle,
+                      })
+                    }}
+                  >
+                    图生视频
+                  </Button>
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    onClick={() => {
+                      handleInsertNodeAt('text', {
+                        x: insertMenu.x,
+                        y: insertMenu.y,
+                        fromNodeId: insertMenu.fromNodeId,
+                        fromHandle: insertMenu.fromHandle,
+                      })
+                    }}
+                  >
+                    反推提示词
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    onClick={() => {
+                      handleInsertNodeAt('image', {
+                        x: insertMenu.x,
+                        y: insertMenu.y,
+                        fromNodeId: insertMenu.fromNodeId,
+                        fromHandle: insertMenu.fromHandle,
+                      })
+                    }}
+                  >
+                    文生图
+                  </Button>
+                  <Button
+                    variant="subtle"
+                    size="xs"
+                    onClick={() => {
+                      handleInsertNodeAt('video', {
+                        x: insertMenu.x,
+                        y: insertMenu.y,
+                        fromNodeId: insertMenu.fromNodeId,
+                        fromHandle: insertMenu.fromHandle,
+                      })
+                    }}
+                  >
+                    文生视频
+                  </Button>
+                </>
+              )}
+            </Stack>
+          </Paper>
+        )
+      })()}
       {connectingType && (
         <div style={{ position: 'fixed', left: mouse.x + 12, top: mouse.y + 12, pointerEvents: 'none', fontSize: 12, background: 'rgba(17,24,39,.85)', color: '#e5e7eb', padding: '4px 8px', borderRadius: 6, border: '1px solid rgba(255,255,255,.1)' }}>
           连接类型: {connectingType}，拖到兼容端口

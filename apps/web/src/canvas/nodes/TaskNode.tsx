@@ -327,8 +327,6 @@ export default function TaskNode({ id, data, selected }: NodeProps<Data>): JSX.E
               {/* 快捷操作列表，增强引导 */}
               <div style={{ width: 296, display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 2px' }} onMouseLeave={()=>setHovered(null)}>
                 {[
-                  { label: '上传图片并编辑', icon: <IconUpload size={16} />, onClick: () => fileRef.current?.click(), hint: '图片大小不能超过30MB' },
-                  { label: '图片换背景', icon: <IconTexture size={16} />, onClick: () => connectToRight('image','Image') },
                   { label: '图生视频', icon: <IconVideo size={16} />, onClick: () => connectToRight('video','Video') },
                   { label: '反推提示词', icon: <IconAdjustments size={16} />, onClick: () => connectImageToText() },
                 ].map((row, idx) => {
