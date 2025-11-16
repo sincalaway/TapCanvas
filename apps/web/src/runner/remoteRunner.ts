@@ -307,7 +307,8 @@ export async function runNodeRemote(id: string, get: Getter, set: Setter) {
             // 任务已不在队列中，尝试通过 task_id 反查草稿并填充最终视频 URL
             let videoUrl: string | null = null
             try {
-              const draft = await getSoraVideoDraftByTask(taskId)
+              const tokenId = (data as any)?.videoTokenId as string | undefined
+              const draft = await getSoraVideoDraftByTask(taskId, tokenId || null)
               videoUrl = draft.videoUrl || null
             } catch {
               videoUrl = null
