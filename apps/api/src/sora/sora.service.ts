@@ -417,16 +417,6 @@ export class SoraService {
       const baseUrl = await this.resolveBaseUrl(token, 'sora', 'https://sora.chatgpt.com')
       const url = new URL(`/backend/project_y/characters/${characterId}/update`, baseUrl).toString()
       const userAgent = token.userAgent || 'TapCanvas/1.0'
-      this.logger.debug(url,'url',{
-            Authorization: `Bearer ${token.secretToken}`,
-            'User-Agent': userAgent,
-            Accept: '*/*',
-            'Content-Type': 'application/json',
-          },{
-          username: payload.username,
-          display_name: payload.display_name ?? null,
-          profile_asset_pointer: payload.profile_asset_pointer ?? null,
-        })
       const res = await axios.post(
         url,
         {
